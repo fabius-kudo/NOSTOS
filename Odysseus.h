@@ -6,6 +6,12 @@
 #define MAX_FOOD 20
 #define IP_LENGTH 16
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+
 typedef struct {
     char product[MAX_NAME];
     float quantity;
@@ -13,15 +19,15 @@ typedef struct {
 
 typedef struct {
     char name[MAX_NAME];
-    char filePath[MAX_PATH];
-    char ithacaIP[IP_LENGTH];
-    int ithacaPort;
-    char islandName[MAX_NAME];
-    char islandIP[IP_LENGTH];
+    char file_path[MAX_PATH];
+    char ithaca_ip[IP_LENGTH];
+    int ithaca_port;
+    char island_name[MAX_NAME];
+    char island_ip[IP_LENGTH];
     int islandPort;
-    int initialMoney; //maybe should be float
-    int initialFoodSupply;
-    Food foodSupplies[MAX_FOOD];
+    int initial_money; //maybe should be float
+    int num_food_items;
+    Food food_supplies[MAX_FOOD];
 } Odysseus;
 
 #endif //CODE_ODYSSEUS_H
