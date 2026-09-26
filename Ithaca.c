@@ -111,8 +111,8 @@ Voyage *parseVoyages(char *voyages_path, int *num_voyages) {
 
 int main(int argc, char *argv[]) {
     Ithaca ithaca;
-    Voyage *voyages;
-    int num_voyages;
+    Voyage *voyages = NULL;
+    int num_voyages = 0;
 
     if (argc != 3) {
         //TODO: make real error message
@@ -124,6 +124,9 @@ int main(int argc, char *argv[]) {
     char *voyages_path = argv[2];
 
     ithaca = parseIthaca(config_path);
-
     voyages = parseVoyages(voyages_path, &num_voyages);
+
+    free(voyages);
+
+    return 0;
 }
