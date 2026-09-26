@@ -6,6 +6,13 @@
 #define IP_LENGTH 16
 #define MAX_ROUTES 50
 
+//Todo: maybe need a product.h file
+typedef struct {
+    char name[MAX_NAME];
+    int quantity;
+    int price;
+} Product;
+
 typedef struct {
     char name[MAX_NAME];
     char ipAddress[IP_LENGTH];
@@ -19,6 +26,7 @@ typedef struct {
     int port;
     int maxCapacity;
     Route routes[MAX_ROUTES];
+    int numRoutes;
 } Island;
 
 #endif //CODE_ISLAND_H
