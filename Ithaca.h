@@ -1,6 +1,12 @@
 #ifndef CODE_ITHICA_H
 #define CODE_ITHICA_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+
 #define MAX_NAME 50
 #define MAX_PATH 256
 #define IP_LENGTH 16
