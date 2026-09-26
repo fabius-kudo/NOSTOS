@@ -1,4 +1,5 @@
 #include "Odysseus.h"
+#include "custom_string.h"
 
 Odysseus parseOdysseus(char * config_path) {
     Odysseus od;
@@ -63,7 +64,7 @@ Odysseus parseOdysseus(char * config_path) {
     od.num_food_items = atoi(line);
 
     // Remaining lines: PRODUCT AMOUNT
-    od.food_supplies = malloc(sizeof(Food) * od.num_food_items);
+    //od.food_supplies = malloc(sizeof(Food) * od.num_food_items);  TODO fix
     if (!od.food_supplies && od.num_food_items > 0) {
         write(STDERR_FILENO, "Error: malloc failed\n", 21);
         exit(EXIT_FAILURE);
@@ -81,13 +82,87 @@ Odysseus parseOdysseus(char * config_path) {
     return od;
 }
 
+/*  --- Terminal commands ---   */
+
+// --- command functions
+static int cmd_def(int argc, char *argv[]){
+    
+    return 0;
+}
+
+static Command commands[] = {
+    { "add",    2, "Usage: add <name> <value>\n",   cmd_def },
+    { "remove",    0, "Usage: remove\n",   cmd_def }
+};
+
+static const int numCommands = sizeof(commands) / sizeof(commands[0]);
+
+static int tokenizeLine(char *line, char *argv[], int maxTokens) {
+    int argc = 0;
+    char *token = strtok(line, " \t");
+
+    while (token != NULL && argc < maxTokens) {
+        argv[argc++] = token;
+        token = strtok(NULL, " \t");
+    }
+    return argc;
+}
+
+static Command *findCommand(const char *name) {
+    for (int i = 0; i < numCommands; i++) {
+        if (strcmp(commands[i].name, name) == 0) {
+            return &commands[i];
+        }
+    }
+    return NULL;
+}
+
+static void processLine(char *argv[], int argc){
+    if (argc == 0){         //blank line
+        return;
+    }
+
+    Command *cmd = findCommand(argv[0]);
+
+    if (cmd == NULL){
+        write(STDOUT_FILENO,"Unknown command\n",strlen("Unknown command\n"));
+        return;
+    }
+
+    int givenArgs = argc - 1; //exclude commands as arg
+
+    if (givenArgs != cmd->numArgs){
+        write(STDOUT_FILENO,cmd->usage,strlen(cmd->usage));
+        return;
+    }
+
+    cmd->handler(argc, argv); //add return val check maybe
+    write(STDOUT_FILENO, "Command OK\n", strlen("Command OK\n"));
+}
+
+
+
 int main(int argc, char *argv[]) {
+    char *line;
+    
     if (argc != 2) {
         //TODO: add error message
+        write(STDOUT_FILENO,"ERROR\n",strlen("ERROR\n"));
         exit(EXIT_FAILURE);
     }
 
     char *config_path = argv[1];
 
-    Odysseus odysseus = parseOdysseus(config_path);
+    //Odysseus odysseus = parseOdysseus(config_path);
+
+    while ((line = readLineDynamic(STDIN_FILENO)) != NULL) {
+        char *argv[MAX_ARGS];
+        int argc = tokenizeLine(line, argv, MAX_ARGS);
+
+        processLine(argv, argc);
+
+        free(line);
+    }
+
+    return 0;
 }
