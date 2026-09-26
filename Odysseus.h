@@ -38,10 +38,18 @@ typedef struct {
 
 typedef int (*CommandHandler)(int argc, char *argv[]);  
 
+typedef enum {
+    ARG_NONE,
+    ARG_NUMERIC,
+    ARG_TEXT
+} ArgKind;
+
 typedef struct {
-    const char     *name;       
-    int             numArgs;   //excluding self
-    const char     *usage;     //message for args
+    const char     *word1;      
+    const char     *word2;      
+    int             numArgs;
+    ArgKind         argKinds[2]; 
+    const char     *usage;
     CommandHandler  handler;
 } Command;
 
