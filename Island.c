@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+static volatile sig_atomic_t stop = 0;
+
 Island parseIsland(char *islands_path) {
     Island island;
 
@@ -102,10 +104,16 @@ Product *parseStock(char *stock_path, int *num_products) {
     return products;
 }
 
+void handle_exit(int sig) {
+    (void)sig; //used to avoid unused parameter warning
+    stop = 1;
+}
+
 int main(int argc, char *argv[]) {
     Island island;
     Product *stock = NULL;
     int num_products = 0;
+    char buf[100];
 
     if (argc != 3) {
         //TODO: make real error message
@@ -113,11 +121,23 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    signal(SIGINT, handle_exit);
+
     char *config_path = argv[1];
     char *stock_path = argv[2];
-
+    
     island = parseIsland(config_path);
     stock = parseStock(stock_path, &num_products);
+
+    int len = snprintf(buf, sizeof(buf), "Island %s initialized.\nPort capacity: %d.\n%d sea routes loaded.\n%d products available.\n", island.name, island.maxCapacity, island.numRoutes, num_products);
+    write(STDOUT_FILENO, buf, len);
+
+    while (!stop) {
+        pause();
+    }
+
+    int len = snprintf(buf, 0, "\n%s closes its port.\n", island.name);
+    write(STDOUT_FILENO, buf, len);
 
     free(stock);
     

@@ -1,6 +1,8 @@
 #include "Odysseus.h"
 #include "custom_string.h"
 
+static volatile sig_atomic_t stop = 0;
+
 Odysseus parseOdysseus(char * config_path) {
     Odysseus od;
     int fd = open(config_path, O_RDONLY);
@@ -182,7 +184,10 @@ static void processLine(char *tokens[], int tokenCount) {
     write(STDOUT_FILENO, "Command OK\n", strlen("Command OK\n"));
 }
 
-
+void handle_exit(int sig) {
+    (void)sig; //used to avoid unused parameter warning
+    stop = 1;
+}
 
 int main(int argc, char *argv[]) {
     char *line;
@@ -193,11 +198,13 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    signal(SIGINT, handle_exit);
+
     char *config_path = argv[1];
 
     //Odysseus odysseus = parseOdysseus(config_path);
 
-    while ((line = readLineDynamic(STDIN_FILENO)) != NULL) {
+    while ((line = readLineDynamic(STDIN_FILENO)) != NULL && !stop) {
         char *argv[MAX_ARGS];
         int argc = tokenizeLine(line, argv, MAX_ARGS);
 
@@ -205,6 +212,8 @@ int main(int argc, char *argv[]) {
 
         free(line);
     }
+
+    write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", strlen("\nOdysseus stops his journey.\n"));
 
     return 0;
 }

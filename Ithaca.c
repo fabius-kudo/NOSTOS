@@ -1,5 +1,7 @@
 #include "Ithaca.h"
 
+static volatile sig_atomic_t stop = 0;
+
 Ithaca parseIthaca(char *config_path) {
     Ithaca ithaca;
     int fd = open(config_path, O_RDONLY);
@@ -109,10 +111,16 @@ Voyage *parseVoyages(char *voyages_path, int *num_voyages) {
     return voyages;
 }
 
+void handle_exit(int sig) {
+    (void)sig; //used to avoid unused parameter warning
+    stop = 1;
+}
+
 int main(int argc, char *argv[]) {
     Ithaca ithaca;
     Voyage *voyages = NULL;
     int num_voyages = 0;
+    char buf[100];
 
     if (argc != 3) {
         //TODO: make real error message
@@ -120,11 +128,22 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    signal(SIGINT, handle_exit);
+
     char *config_path = argv[1];
     char *voyages_path = argv[2];
 
     ithaca = parseIthaca(config_path);
     voyages = parseVoyages(voyages_path, &num_voyages);
+
+    int len = snprintf(buf, sizeof(buf), "Ithaca initialized. %d voyages loaded.\nWaiting for Odysseus...\n", num_voyages);
+    write(STDOUT_FILENO, buf, len);
+
+    while (!stop) {
+        pause();
+    }
+    
+    write(STDOUT_FILENO, "\nIthaca closes the harbor.\n", strlen("\nIthaca closes the harbor.\n"));
 
     free(voyages);
 
