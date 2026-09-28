@@ -130,9 +130,6 @@ int main(int argc, char *argv[]) {
     island = parseIsland(config_path);
     stock = parseStock(stock_path, &num_products);
 
-    int len = snprintf(buf, sizeof(buf), "Island %s initialized.\nPort capacity: %d.\n%d sea routes loaded.\n%d products available.\n", island.name, island.max_capacity, island.num_routes, num_products);
-    write(STDOUT_FILENO, buf, len);
-
     int new_num_routes = SPHRAGIS_filter_island_configuration(&island);
 
     if (new_num_routes == SPHRAGIS_ERROR_INVALID_ISLAND) {
@@ -142,6 +139,9 @@ int main(int argc, char *argv[]) {
     } else {
         island.num_routes = new_num_routes;
     }
+    
+    int len = snprintf(buf, sizeof(buf), "Island %s initialized.\nPort capacity: %d.\n%d sea routes loaded.\n%d products available.\n", island.name, island.max_capacity, island.num_routes, num_products);
+    write(STDOUT_FILENO, buf, len);
 
     while (!stop) {
         pause();
