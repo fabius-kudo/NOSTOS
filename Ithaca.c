@@ -37,8 +37,8 @@ Ithaca parseIthaca(char *config_path) {
     // Line 3: IP + port
     line = strtok(NULL, "\n");
     char *tok = strtok(line, " ");
-    strncpy(ithaca.ipAddress, tok, sizeof(ithaca.ipAddress) - 1);
-    ithaca.ipAddress[sizeof(ithaca.ipAddress) - 1] = '\0';
+    strncpy(ithaca.ip_address, tok, sizeof(ithaca.ip_address) - 1);
+    ithaca.ip_address[sizeof(ithaca.ip_address) - 1] = '\0';
     tok = strtok(NULL, " ");
     ithaca.port = atoi(tok);
 

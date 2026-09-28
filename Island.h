@@ -15,18 +15,18 @@ typedef struct {
 
 typedef struct {
     char name[MAX_NAME];
-    char ipAddress[IP_LENGTH];
+    char ip_address[IP_LENGTH];
     int port;
 } Route;
 
 typedef struct {
     char name[MAX_NAME];
     char path[MAX_PATH];
-    char ipAddress[IP_LENGTH];
+    char ip_address[IP_LENGTH];
     int port;
-    int maxCapacity;
+    int max_capacity;
     Route routes[MAX_ROUTES];
-    int numRoutes;
+    int num_routes;
 } Island;
 
 #endif //CODE_ISLAND_H

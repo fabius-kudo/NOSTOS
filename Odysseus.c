@@ -55,7 +55,7 @@ Odysseus parseOdysseus(char * config_path) {
     od.island_ip[sizeof(od.island_ip) - 1] = '\0';
 
     tok = strtok(NULL, " ");
-    od.islandPort = atoi(tok);
+    od.island_port = atoi(tok);
 
     // Line 5: money
     line = strtok(NULL, "\n");

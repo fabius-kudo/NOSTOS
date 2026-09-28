@@ -14,7 +14,7 @@
 typedef struct {
     char serverName[MAX_NAME];
     char path[MAX_PATH];
-    char ipAddress[IP_LENGTH];
+    char ip_address[IP_LENGTH];
     int port;
 } Ithaca;
 

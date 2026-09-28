@@ -1,4 +1,5 @@
 #include "Island.h"
+#include "SPHRAGIS Library-20260917/sphragis.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,20 +45,20 @@ Island parseIsland(char *islands_path) {
     // Line 3: IP + port
     line = strtok(NULL, "\n");
     char *tok = strtok(line, " ");
-    strncpy(island.ipAddress, tok, sizeof(island.ipAddress) - 1);
-    island.ipAddress[sizeof(island.ipAddress) - 1] = '\0';
+    strncpy(island.ip_address, tok, sizeof(island.ip_address) - 1);
+    island.ip_address[sizeof(island.ip_address) - 1] = '\0';
     tok = strtok(NULL, " ");
     island.port = atoi(tok);
 
     // Line 4: max capacity
     line = strtok(NULL, "\n");
-    island.maxCapacity = atoi(line);
+    island.max_capacity = atoi(line);
 
     // Line 5: comment
     line = strtok(NULL, "\n");
 
     // Line 6: routes
-    int numRoutes = 0;
+    int num_routes = 0;
     for (int i = 0; i < MAX_ROUTES; i++) {
         line = strtok(NULL, "\n");
         if (line == NULL) {
@@ -68,15 +69,15 @@ Island parseIsland(char *islands_path) {
         island.routes[i].name[sizeof(island.routes[i].name) - 1] = '\0';
 
         tok = strtok(NULL, " ");
-        strncpy(island.routes[i].ipAddress, tok, sizeof(island.routes[i].ipAddress) - 1);
-        island.routes[i].ipAddress[sizeof(island.routes[i].ipAddress) - 1] = '\0';
+        strncpy(island.routes[i].ip_address, tok, sizeof(island.routes[i].ip_address) - 1);
+        island.routes[i].ip_address[sizeof(island.routes[i].ip_address) - 1] = '\0';
 
         tok = strtok(NULL, " ");
         island.routes[i].port = atoi(tok);
 
-        numRoutes++;
+        num_routes++;
     }
-    island.numRoutes = numRoutes;
+    island.num_routes = num_routes;
 
     return island;
 }
@@ -129,8 +130,18 @@ int main(int argc, char *argv[]) {
     island = parseIsland(config_path);
     stock = parseStock(stock_path, &num_products);
 
-    int len = snprintf(buf, sizeof(buf), "Island %s initialized.\nPort capacity: %d.\n%d sea routes loaded.\n%d products available.\n", island.name, island.maxCapacity, island.numRoutes, num_products);
+    int len = snprintf(buf, sizeof(buf), "Island %s initialized.\nPort capacity: %d.\n%d sea routes loaded.\n%d products available.\n", island.name, island.max_capacity, island.num_routes, num_products);
     write(STDOUT_FILENO, buf, len);
+
+    int new_num_routes = SPHRAGIS_filter_island_configuration(&island);
+
+    if (new_num_routes == SPHRAGIS_ERROR_INVALID_ISLAND) {
+        //TODO: add error message
+    } else if (new_num_routes == SPHRAGIS_ERROR_INVALID_CONNECTION)  {
+        //TODO: add error message
+    } else {
+        island.num_routes = new_num_routes;
+    }
 
     while (!stop) {
         pause();

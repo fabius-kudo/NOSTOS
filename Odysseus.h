@@ -28,7 +28,7 @@ typedef struct {
     int ithaca_port;
     char island_name[MAX_NAME];
     char island_ip[IP_LENGTH];
-    int islandPort;
+    int island_port;
     int initial_money; //maybe should be float
     int num_food_items;
     Food food_supplies[MAX_FOOD];
