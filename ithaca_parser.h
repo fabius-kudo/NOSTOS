@@ -1,11 +1,5 @@
-#ifndef CODE_ITHICA_H
-#define CODE_ITHICA_H
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
+#ifndef CODE_ITHACA_PARSER_H
+#define CODE_ITHACA_PARSER_H
 
 #define MAX_NAME 50
 #define MAX_PATH 256
@@ -25,4 +19,7 @@ typedef struct {
     int reward;
 } Voyage;
 
-#endif //CODE_ITHICA_H
+Ithaca parseIthaca(char *config_path);
+Voyage *parseVoyages(char *voyages_path, int *num_voyages);
+
+#endif //CODE_ITHACA_PARSER_H

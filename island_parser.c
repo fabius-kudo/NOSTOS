@@ -1,4 +1,5 @@
-#include "Island.h"
+#include "island_parser.h"
+
 #include "SPHRAGIS Library-20260917/sphragis.h"
 
 #include <stdio.h>
@@ -103,54 +104,4 @@ Product *parseStock(char *stock_path, int *num_products) {
     close(fd);
     *num_products = count;
     return products;
-}
-
-void handle_exit(int sig) {
-    (void)sig; //used to avoid unused parameter warning
-    stop = 1;
-}
-
-int main(int argc, char *argv[]) {
-    Island island;
-    Product *stock = NULL;
-    int num_products = 0;
-    char buf[100];
-
-    if (argc != 3) {
-        //TODO: make real error message
-        write(STDERR_FILENO, "Error: invalid number of arguments\n", 37);
-        exit(EXIT_FAILURE);
-    }
-
-    signal(SIGINT, handle_exit);
-
-    char *config_path = argv[1];
-    char *stock_path = argv[2];
-    
-    island = parseIsland(config_path);
-    stock = parseStock(stock_path, &num_products);
-
-    int new_num_routes = SPHRAGIS_filter_island_configuration(&island);
-
-    if (new_num_routes == SPHRAGIS_ERROR_INVALID_ISLAND) {
-        //TODO: add error message
-    } else if (new_num_routes == SPHRAGIS_ERROR_INVALID_CONNECTION)  {
-        //TODO: add error message
-    } else {
-        island.num_routes = new_num_routes;
-    }
-    
-    int len = snprintf(buf, sizeof(buf), "Island %s initialized.\nPort capacity: %d.\n%d sea routes loaded.\n%d products available.\n", island.name, island.max_capacity, island.num_routes, num_products);
-    write(STDOUT_FILENO, buf, len);
-
-    while (!stop) {
-        pause();
-    }
-
-    int len = snprintf(buf, 0, "\n%s closes its port.\n", island.name);
-    write(STDOUT_FILENO, buf, len);
-
-    free(stock);
-    
-    return 0;
 }

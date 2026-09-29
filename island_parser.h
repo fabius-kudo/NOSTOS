@@ -1,5 +1,5 @@
-#ifndef CODE_ISLAND_H
-#define CODE_ISLAND_H
+#ifndef CODE_ISLAND_PARSER_H
+#define CODE_ISLAND_PARSER_H
 
 #define MAX_NAME 50
 #define MAX_PATH 256
@@ -29,4 +29,7 @@ typedef struct {
     int num_routes;
 } Island;
 
-#endif //CODE_ISLAND_H
+Island parseIsland(char *islands_path);
+Product *parseStock(char *stock_path, int *num_products);
+
+#endif //CODE_ISLAND_PARSER_H
