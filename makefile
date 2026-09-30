@@ -5,23 +5,35 @@
 build/custom_string.o: src/custom_string.c src/custom_string.h
 	gcc src/custom_string.c -Wall -Wextra -g -c -o build/custom_string.o
 
-build/Odysseus.o: src/Odysseus.c src/Odysseus.h src/custom_string.h
-	gcc src/Odysseus.c -Wall -Wextra -g -c -o build/Odysseus.o
+build/odysseus_parser.o: src/odysseus_parser.c src/odysseus_parser.h
+	gcc src/odysseus_parser.c -Wall -Wextra -g -c -o build/odysseus_parser.o
 
-build/Island.o: src/Island.c src/SPHRAGIS Library-20260917/sphragis.h
-	gcc src/Island.c -Wall -Wextra -g -c -o build/Island.o
+build/odysseus_command.o: src/odysseus_command.c src/odysseus_command.h
+	gcc src/odysseus_command.c -Wall -Wextra -g -c -o build/odysseus_command.o
 
-build/Itchaca.o: src/Itchaca.c
-	gcc src/Itchaca.c -Wall -Wextra -g -c -o build/Itchaca.o
+build/Odysseus.o: src/odysseus_main.c src/odysseus_parser.h src/odysseus_command.h src/custom_string.h
+	gcc src/odysseus_main.c -Wall -Wextra -g -c -o build/Odysseus.o
 
-Odysseus: build/Odysseus.o build/custom_string.o
-	gcc build/Odysseus.o build/custom_string.o -g -o build/Odysseus -lpthread
+build/island_parser.o: src/island_parser.c src/island_parser.h
+	gcc src/island_parser.c -Wall -Wextra -g -c -o build/island_parser.o
 
-Island: build/Island.o
-	gcc build/Island.o -g -o build/Island -lpthread
+build/Island.o: src/island_main.c src/SPHRAGIS\ Library-20260917/sphragis.h src/island_parser.h
+	gcc src/island_main.c -Wall -Wextra -g -c -o build/Island.o
 
-Itchaca: build/Itchaca.o
-	gcc build/Itchaca.o -g -o build/Itchaca -lpthread
+build/itchaca_parser.o: src/itchaca_parser.c src/itchaca_parser.h
+	gcc src/itchaca_parser.c -Wall -Wextra -g -c -o build/itchaca_parser.o
+
+build/Itchaca.o: src/itchaca_main.c src/itchaca_parser.h
+	gcc src/itchaca_main.c -Wall -Wextra -g -c -o build/Itchaca.o
+
+Odysseus: build/Odysseus.o build/odysseus_parser.o build/odysseus_command.o build/custom_string.o
+	gcc build/Odysseus.o build/odysseus_parser.o build/odysseus_command.o build/custom_string.o -g -o build/Odysseus -lpthread
+
+Island: build/Island.o build/island_parser.o src/SPHRAGIS\ Library-20260917/sphragis.o
+	gcc build/Island.o build/island_parser.o src/SPHRAGIS\ Library-20260917/sphragis.o -g -o build/Island -lpthread
+
+Itchaca: build/Itchaca.o build/itchaca_parser.o
+	gcc build/Itchaca.o build/itchaca_parser.o -g -o build/Itchaca -lpthread
 
 all: Odysseus Island Itchaca
 

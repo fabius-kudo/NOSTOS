@@ -1,5 +1,8 @@
 #include "custom_string.h"
 
+#include <unistd.h>
+#include <stdlib.h>
+
 char *readLineDynamic(int fd) {
     int cap = 16;
     int len = 0;
