@@ -7,8 +7,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 
-static volatile sig_atomic_t stop = 0;
+static volatile int stop = 0;
 
 void handle_exit(int sig) {
     (void)sig; //used to avoid unused parameter warning
@@ -25,12 +26,19 @@ int main(int argc, char *argv[]) {
     }
 
     signal(SIGINT, handle_exit);
+    siginterrupt(SIGINT, 1);    //TODO: make sigaction:
+
+    // struct sigaction sa;
+    // sa.sa_handler = handle_exit;
+    // sigemptyset(&sa.sa_mask);
+    // sa.sa_flags = 0; /* no SA_RESTART: read() returns EINTR immediately instead of resuming */
+    // sigaction(SIGINT, &sa, NULL);
 
     char *config_path = argv[1];
 
-    Odysseus odysseus = parseOdysseus(config_path);
+    //Odysseus odysseus = parseOdysseus(config_path);
 
-    while ((line = readLineDynamic(STDIN_FILENO)) != NULL && !stop) {
+    while (!stop && (line = readLineDynamic(STDIN_FILENO)) != NULL) {
         char *argv[MAX_ARGS];
         int argc = tokenizeLine(line, argv, MAX_ARGS);
 

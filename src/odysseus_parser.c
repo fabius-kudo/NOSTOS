@@ -9,6 +9,7 @@ Odysseus parseOdysseus(char * config_path) {
     Odysseus od;
     int fd = open(config_path, O_RDONLY);
     if (fd < 0) {
+        write(STDERR_FILENO, "Error: failed opening config file\n", 34);
         //TODO: add error message
         exit(EXIT_FAILURE);
     }

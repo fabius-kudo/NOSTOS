@@ -2,12 +2,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+#include <strings.h>
 
 /*  --- Terminal commands ---   */
 
 // --- command functions
 static int cmd_def(int argc, char *argv[]){
-    
+    (void) argc;
+    (void) argv;
     return 0;
 }
 
@@ -39,7 +42,7 @@ static int isNumeric(const char *s) {
     return 1;
 }
 
-static int tokenizeLine(char *line, char *argv[], int maxTokens) {
+int tokenizeLine(char *line, char *argv[], int maxTokens) {
     int argc = 0;
     char *token = strtok(line, " \t");
 
@@ -71,7 +74,7 @@ static Command *findCommand(char *tokens[], int tokenCount, int *nameWords) {
     return NULL;
 }
 
-static void processLine(char *tokens[], int tokenCount) {
+void processLine(char *tokens[], int tokenCount) {
     if (tokenCount == 0) {
         return;
     }
