@@ -1,4 +1,4 @@
-#include "custom_string.h"
+#include "custom_dynamic.h"
 #include "odysseus_command.h"
 #include "odysseus_parser.h"
 
@@ -26,17 +26,11 @@ int main(int argc, char *argv[]) {
 
     signal(SIGINT, handle_exit);
 
-    // struct sigaction sa;
-    // sa.sa_handler = handle_exit;
-    // sigemptyset(&sa.sa_mask);
-    // sa.sa_flags = 0; /* no SA_RESTART: read() returns EINTR immediately instead of resuming */
-    // sigaction(SIGINT, &sa, NULL);
+    Odysseus odysseus = parseOdysseus(argv[1]);
+    printOdysseus(&odysseus);
 
-    char *config_path = argv[1];
 
-    //Odysseus odysseus = parseOdysseus(config_path);
-
-    while (!stop && (line = readLineDynamic(STDIN_FILENO)) != NULL) {
+    while (!stop && (line = readDynamic(STDIN_FILENO, 1)) != NULL) {
         char *argv[MAX_ARGS];
         int argc = tokenizeLine(line, argv, MAX_ARGS);
 
@@ -46,10 +40,10 @@ int main(int argc, char *argv[]) {
 
     if (stop) {     
         write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", strlen("\nOdysseus stops his journey.\n"));
+        freeOdysseus(&odysseus);
         signal(SIGINT, SIG_DFL);
         raise(SIGINT);
     }
-    return 0;
 
     return 0;
 }

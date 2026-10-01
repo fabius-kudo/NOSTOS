@@ -1,24 +1,20 @@
 #ifndef CODE_ODYSSEUS_PARSER_H
 #define CODE_ODYSSEUS_PARSER_H
 
-#define MAX_NAME 100
-#define MAX_PATH 256
-#define MAX_IP 16
-
 typedef struct {
-    char product[MAX_NAME];
+    char *product;
     int quantity;
 } Food;
 
 typedef struct {
-    char name[MAX_NAME];
-    char file_path[MAX_PATH];
+    char *name;
+    char *file_path;
 
-    char ithaca_ip[MAX_IP];
+    char *ithaca_ip;
     int  ithaca_port;
 
-    char island_name[MAX_NAME];
-    char island_ip[MAX_IP];
+    char *island_name;
+    char *island_ip;
     int  island_port;
 
     int  initial_money;
@@ -28,5 +24,7 @@ typedef struct {
 
 Odysseus parseOdysseus(char *config_path);
 void freeOdysseus(Odysseus *od);
+
+void printOdysseus(const Odysseus *od);
 
 #endif //CODE_ODYSSEUS_PARSER_H

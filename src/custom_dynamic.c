@@ -1,9 +1,9 @@
-#include "custom_string.h"
+#include "custom_dynamic.h"
 
 #include <unistd.h>
 #include <stdlib.h>
 
-char *readLineDynamic(int fd) {
+char *readDynamic(int fd, int untilNewline) {
     int cap = 16;
     int len = 0;
     char *buf = malloc(cap);
@@ -15,14 +15,18 @@ char *readLineDynamic(int fd) {
         char c;
         int n = read(fd, &c, 1);
 
-        if (n <= 0) {          //EOF or error
+        if (n < 0) {                //error or interrupted by signal
+            free(buf);
+            return NULL;
+        }
+        if (n == 0) {               //EOF
             if (len == 0) {
                 free(buf);
-                return NULL;
+                return NULL; 
             }
             break;
         }
-        if (c == '\n') {
+        if (c == '\n' && untilNewline) {
             break;
         }
 
@@ -40,4 +44,15 @@ char *readLineDynamic(int fd) {
 
     buf[len] = '\0';
     return buf;
+}
+
+
+char *dupString(const char *s) {
+    char *copy = malloc(strlen(s) + 1); // \0
+    if (copy == NULL) {
+        write(STDERR_FILENO, "Error: malloc failed in dupString\n", 35);
+        return NULL;                 
+    }
+    strcpy(copy, s);
+    return copy;
 }
