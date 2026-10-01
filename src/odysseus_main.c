@@ -12,10 +12,9 @@
 static volatile int stop = 0;
 
 void handle_exit(int sig) {
-    (void)sig; //used to avoid unused parameter warning
+    (void)sig; // unused parameter
     stop = 1;
 }
-
 int main(int argc, char *argv[]) {
     char *line;
     
@@ -26,7 +25,6 @@ int main(int argc, char *argv[]) {
     }
 
     signal(SIGINT, handle_exit);
-    siginterrupt(SIGINT, 1);    //TODO: make sigaction:
 
     // struct sigaction sa;
     // sa.sa_handler = handle_exit;
@@ -43,11 +41,15 @@ int main(int argc, char *argv[]) {
         int argc = tokenizeLine(line, argv, MAX_ARGS);
 
         processLine(argv, argc);
-
         free(line);
     }
 
-    write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", strlen("\nOdysseus stops his journey.\n"));
+    if (stop) {     
+        write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", strlen("\nOdysseus stops his journey.\n"));
+        signal(SIGINT, SIG_DFL);
+        raise(SIGINT);
+    }
+    return 0;
 
     return 0;
 }
