@@ -1,4 +1,6 @@
 #include "odysseus_parser.h"
+#include "custom_dynamic.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,86 +9,74 @@
 
 Odysseus parseOdysseus(char * config_path) {
     Odysseus od;
+    memset(&od, 0, sizeof(od)); //like malloc and all pointers NULL
+
     int fd = open(config_path, O_RDONLY);
     if (fd < 0) {
-        //TODO: add error message
+        write(STDERR_FILENO, "Error: failed opening config file\n", 34);
         exit(EXIT_FAILURE);
     }
 
     //Read whole file into buffer
-    char buf[1000]; //TODO: make dynamic
-    int total = 0, n;
-    while ((n = read(fd, &buf[total], sizeof(buf) - total - 1)) > 0) {
-        total += n;
-    }
+    char *buf = readDynamic(fd,0);
     close(fd);
-
-    if (n < 0) {
-        write(STDERR_FILENO, "Error: failed reading config file\n", 35);
+    if (!buf) {
+        write(STDERR_FILENO, "Error: malloc failed opening config file\n", 40);
         exit(EXIT_FAILURE);
     }
-    buf[total] = '\0';
 
-    // Line 1: name
-    char *line = strtok(buf, "\n");
-    strncpy(od.name, line, sizeof(od.name) - 1);
-    od.name[sizeof(od.name) - 1] = '\0';
+    od.name = dupString(strtok(buf, " \n"));
+    od.file_path = dupString(strtok(NULL, " \n"));
+    od.ithaca_ip = dupString(strtok(NULL, " \n"));
+    od.ithaca_port = atoi(strtok(NULL, " \n"));
 
-    // Line 2: storage path
-    line = strtok(NULL, "\n");
-    strncpy(od.file_path, line, sizeof(od.file_path) - 1);
-    od.file_path[sizeof(od.file_path) - 1] = '\0';
+    od.island_name = dupString(strtok(NULL, " \n"));
+    od.island_ip = dupString(strtok(NULL, " \n"));
+    od.island_port = atoi(strtok(NULL, " \n"));
 
-    // Line 3: Ithaca IP + port
-    line = strtok(NULL, "\n");
-    char *tok = strtok(line, " ");
-    strncpy(od.ithaca_ip, tok, sizeof(od.ithaca_ip) - 1);
-    od.ithaca_ip[sizeof(od.ithaca_ip) - 1] = '\0';
+    od.initial_money = atoi(strtok(NULL, " \n"));
+    od.num_food_items = atoi(strtok(NULL, " \n"));
 
-    tok = strtok(NULL, " ");
-    od.ithaca_port = atoi(tok);
-
-    // Line 4: start island -> NAME IP PORT
-    line = strtok(NULL, "\n");
-    tok = strtok(line, " ");
-    strncpy(od.island_name, tok, sizeof(od.island_name) - 1);
-    od.island_name[sizeof(od.island_name) - 1] = '\0';
-
-    tok = strtok(NULL, " ");
-    strncpy(od.island_ip, tok, sizeof(od.island_ip) - 1);
-    od.island_ip[sizeof(od.island_ip) - 1] = '\0';
-
-    tok = strtok(NULL, " ");
-    od.island_port = atoi(tok);
-
-    // Line 5: money
-    line = strtok(NULL, "\n");
-    od.initial_money = atoi(line);
-
-    // Line 6: number of food items
-    line = strtok(NULL, "\n");
-    od.num_food_items = atoi(line);
-
-    // Remaining lines: PRODUCT AMOUNT
-    //od.food_supplies = malloc(sizeof(Food) * od.num_food_items);  TODO fix
+    od.food_supplies = malloc(sizeof(Food) * od.num_food_items);
     if (!od.food_supplies && od.num_food_items > 0) {
         write(STDERR_FILENO, "Error: malloc failed\n", 21);
         exit(EXIT_FAILURE);
     }
-
     for (int i = 0; i < od.num_food_items; i++) {
-        line = strtok(NULL, "\n");
-        tok = strtok(line, " ");
-        strncpy(od.food_supplies[i].product, tok, sizeof(od.food_supplies[i].product) - 1);
-        od.food_supplies[i].product[sizeof(od.food_supplies[i].product) - 1] = '\0';
-        tok = strtok(NULL, " ");
-        od.food_supplies[i].quantity = atoi(tok);
+        od.food_supplies[i].product  = dupString(strtok(NULL, " \n"));
+        od.food_supplies[i].quantity = atoi(strtok(NULL, " \n"));
     }
 
+    free(buf);   //free after copies made
     return od;
+
 }
 
 void freeOdysseus(Odysseus *od) {
+    free(od->name);
+    free(od->file_path);
+    free(od->ithaca_ip);
+    free(od->island_name);
+    free(od->island_ip);
+    for (int i = 0; i < od->num_food_items; i++) {
+        free(od->food_supplies[i].product);
+    }
     free(od->food_supplies);
-    od->food_supplies = NULL;
+    memset(od, 0, sizeof(*od));            // no dangling pointers afterwards
+}
+
+//TEST FUNCTION, ILLEGAL TODO:REMOVE
+void printOdysseus(const Odysseus *od) {
+    printf("--- Odysseus ---\n");
+    printf("name:          [%s]\n", od->name);
+    printf("file_path:     [%s]\n", od->file_path);
+    printf("ithaca:        [%s]:%d\n", od->ithaca_ip, od->ithaca_port);
+    printf("island:        [%s] [%s]:%d\n", od->island_name, od->island_ip, od->island_port);
+    printf("initial_money: %d\n", od->initial_money);
+    printf("food items:    %d\n", od->num_food_items);
+    for (int i = 0; i < od->num_food_items; i++) {
+        printf("  [%d] [%s] x %d\n", i, od->food_supplies[i].product, od->food_supplies[i].quantity);
+    }
+    printf("----------------\n");
+    fflush(stdout);
 }

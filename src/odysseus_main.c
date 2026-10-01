@@ -1,4 +1,4 @@
-#include "custom_string.h"
+#include "custom_dynamic.h"
 #include "odysseus_command.h"
 #include "odysseus_parser.h"
 
@@ -7,39 +7,43 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 
-static volatile sig_atomic_t stop = 0;
+static volatile int stop = 0;
 
 void handle_exit(int sig) {
-    (void)sig; //used to avoid unused parameter warning
+    (void)sig;              // unused parameter
+    close(STDIN_FILENO);    //stops extra reads from stdin
     stop = 1;
 }
-
 int main(int argc, char *argv[]) {
     char *line;
     
     if (argc != 2) {
-        //TODO: add error message
-        write(STDOUT_FILENO,"ERROR\n",strlen("ERROR\n"));
+        write(STDOUT_FILENO,"Usage: ./odysseus <config.dat>\n", strlen("Usage: ./odysseus <config.dat>\n"));
         exit(EXIT_FAILURE);
     }
 
     signal(SIGINT, handle_exit);
 
-    char *config_path = argv[1];
+    Odysseus odysseus = parseOdysseus(argv[1]);
+    printOdysseus(&odysseus);   //ILLEGAL TEST FUNCTION TODO: REMOVE
 
-    Odysseus odysseus = parseOdysseus(config_path);
 
-    while ((line = readLineDynamic(STDIN_FILENO)) != NULL && !stop) {
+    while (!stop && (line = readDynamic(STDIN_FILENO, 1)) != NULL) {
         char *argv[MAX_ARGS];
         int argc = tokenizeLine(line, argv, MAX_ARGS);
 
         processLine(argv, argc);
-
         free(line);
     }
 
-    write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", strlen("\nOdysseus stops his journey.\n"));
+    write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", 29);
+    freeOdysseus(&odysseus);
 
+    if (stop) {
+        signal(SIGINT, SIG_DFL);
+        raise(SIGINT);
+    }
     return 0;
 }
