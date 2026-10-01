@@ -1,4 +1,6 @@
 #include "odysseus_parser.h"
+#include "custom_dynamic.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,7 +18,7 @@ Odysseus parseOdysseus(char * config_path) {
     }
 
     //Read whole file into buffer
-    char *buf = readAllDynamic(fd);
+    char *buf = readDynamic(fd,0);
     close(fd);
     if (!buf) {
         write(STDERR_FILENO, "Error: malloc failed opening config file\n", 40);

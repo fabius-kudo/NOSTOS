@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 
 char *readDynamic(int fd, int untilNewline) {
     int cap = 16;
