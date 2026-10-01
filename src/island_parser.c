@@ -1,5 +1,5 @@
 #include "island_parser.h"
-
+#include "custom_dynamic.h"
 #include "SPHRAGIS Library-20260917/sphragis.h"
 
 #include <stdio.h>
@@ -8,79 +8,71 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-static volatile sig_atomic_t stop = 0;
-
 Island parseIsland(char *islands_path) {
     Island island;
+    memset(&island, 0, sizeof(island)); //like malloc and all pointers NULL
 
     int fd = open(islands_path, O_RDONLY);
     if (fd < 0) {
-        write(STDERR_FILENO, "Error: failed to open island file\n", 36);
+        write(STDERR_FILENO, "Error: failed to open island file\n", strlen("Error: failed to open island file\n"));
         exit(EXIT_FAILURE);
     }
 
     //Read whole file into buffer
-    char buf[1000]; //TODO: make dynamic
-    int total = 0, n;
-    while ((n = read(fd, &buf[total], sizeof(buf) - total - 1)) > 0) {
-        total += n;
-    }
+    char *buf = readDynamic(fd, 0);
     close(fd);
-
-    if (n < 0) {
-        write(STDERR_FILENO, "Error: failed reading config file\n", 35);
+    if (!buf) {
+        write(STDERR_FILENO, "Error: malloc failed opening config file\n", strlen("Error: malloc failed opening config file\n"));
         exit(EXIT_FAILURE);
     }
-    buf[total] = '\0';
 
-    // Line 1: name
-    char *line = strtok(buf, "\n");
-    strncpy(island.name, line, sizeof(island.name) - 1);
-    island.name[sizeof(island.name) - 1] = '\0';
-
-    // Line 2: path
-    line = strtok(NULL, "\n");
-    strncpy(island.path, line, sizeof(island.path) - 1);
-    island.path[sizeof(island.path) - 1] = '\0';
-
-    // Line 3: IP + port
-    line = strtok(NULL, "\n");
-    char *tok = strtok(line, " ");
-    strncpy(island.ip_address, tok, sizeof(island.ip_address) - 1);
-    island.ip_address[sizeof(island.ip_address) - 1] = '\0';
-    tok = strtok(NULL, " ");
-    island.port = atoi(tok);
-
-    // Line 4: max capacity
-    line = strtok(NULL, "\n");
-    island.max_capacity = atoi(line);
-
-    // Line 5: comment
-    line = strtok(NULL, "\n");
-
-    // Line 6: routes
-    int num_routes = 0;
-    for (int i = 0; i < MAX_ROUTES; i++) {
-        line = strtok(NULL, "\n");
-        if (line == NULL) {
-            break;
-        }
-        tok = strtok(line, " ");
-        strncpy(island.routes[i].name, tok, sizeof(island.routes[i].name) - 1);
-        island.routes[i].name[sizeof(island.routes[i].name) - 1] = '\0';
-
-        tok = strtok(NULL, " ");
-        strncpy(island.routes[i].ip_address, tok, sizeof(island.routes[i].ip_address) - 1);
-        island.routes[i].ip_address[sizeof(island.routes[i].ip_address) - 1] = '\0';
-
-        tok = strtok(NULL, " ");
-        island.routes[i].port = atoi(tok);
-
-        num_routes++;
+    char *bufCopy = dupString(buf);
+    if (!bufCopy) {
+        write(STDERR_FILENO, "Error: malloc failed\n", strlen("Error: malloc failed\n"));
+        exit(EXIT_FAILURE);
     }
-    island.num_routes = num_routes;
+    int count = 0;
+    char *line = strtok(bufCopy, "\n");
+    while (!strcmp(line, "--- ROUTES ---")) {
+        line = strtok(NULL, "\n");
+    }
+    while (line != NULL) {
+        count++;
+        line = strtok(NULL, "\n");
+    }
+    free(bufCopy);
+
+    island.name = dupString(strtok(buf, "\n"));
+    island.path = dupString(strtok(NULL, "\n"));
+    island.ip_address = dupString(strtok(NULL, " \n"));
+    island.port = atoi(strtok(NULL, " \n"));
+    island.max_capacity = atoi(strtok(NULL, " \n"));
+    island.routes = malloc(sizeof(Route) * count);
+    if (!island.routes && count > 0) {
+        write(STDERR_FILENO, "Error: malloc failed\n", strlen("Error: malloc failed\n"));
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < count; i++) {
+        island.routes[i].name = dupString(strtok(NULL, " \n"));
+        island.routes[i].ip_address = dupString(strtok(NULL, " \n"));
+        island.routes[i].port = atoi(strtok(NULL, " \n"));
+    }
+
+    island.num_routes = count;
 
     return island;
+}
+
+void freeIsland(Island island) {
+    free(island.name);
+    free(island.path);
+    free(island.ip_address);
+    for (int i = 0; i < island.num_routes; i++) {
+        free(island.routes[i].name);
+        free(island.routes[i].ip_address);
+    }
+    free(island.routes);
 }
 
 Product *parseStock(char *stock_path, int *num_products) {
@@ -89,7 +81,7 @@ Product *parseStock(char *stock_path, int *num_products) {
 
     int fd = open(stock_path, O_RDONLY);
     if (fd < 0) {
-        write(STDERR_FILENO, "Error: failed to open stock file\n", 34);
+        write(STDERR_FILENO, "Error: failed to open stock file\n", strlen("Error: failed to open stock file\n"));
         exit(EXIT_FAILURE);
     }
 
@@ -104,4 +96,20 @@ Product *parseStock(char *stock_path, int *num_products) {
     close(fd);
     *num_products = count;
     return products;
+}
+
+//TEST FUNCTION, ILLEGAL TODO:REMOVE
+void printIsland(const Island *island) {
+    printf("Island Name: %s\n", island->name);
+    printf("Path: %s\n", island->path);
+    printf("IP Address: %s\n", island->ip_address);
+    printf("Port: %d\n", island->port);
+    printf("Max Capacity: %d\n", island->max_capacity);
+    printf("Number of Routes: %d\n", island->num_routes);
+    for (int i = 0; i < island->num_routes; i++) {
+        printf("Route %d:\n", i + 1);
+        printf("  Name: %s\n", island->routes[i].name);
+        printf("  IP Address: %s\n", island->routes[i].ip_address);
+        printf("  Port: %d\n", island->routes[i].port);
+    }
 }
