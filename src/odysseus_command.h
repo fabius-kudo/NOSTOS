@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : odysseus_command.h
+ * @Purpose : Header file for command handling in the Odysseus application
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #ifndef CODE_ODYSSEUS_COMMAND_H
 #define CODE_ODYSSEUS_COMMAND_H
 

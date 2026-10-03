@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : ithaca_main.c
+ * @Purpose : Main function for the Ithaca application
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>

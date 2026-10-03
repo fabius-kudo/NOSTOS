@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : island_parser.c
+ * @Purpose : Parsing functions for island data
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #include "island_parser.h"
 #include "custom_dynamic.h"
 #include "SPHRAGIS Library-20260917/sphragis.h"

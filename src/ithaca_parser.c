@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : ithaca_parser.c
+ * @Purpose : Parsing functions for Ithaca data
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #include "ithaca_parser.h"
 #include "custom_dynamic.h"
 

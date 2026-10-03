@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : odysseus_parser.c
+ * @Purpose : Parser for the Odysseus application
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #include "odysseus_parser.h"
 #include "custom_dynamic.h"
 

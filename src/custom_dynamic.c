@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : custom_dynamic.c
+ * @Purpose : Dynamic memory management functions
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #include "custom_dynamic.h"
 
 #include <unistd.h>

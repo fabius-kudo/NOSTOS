@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : odysseus_main.c
+ * @Purpose : Main function for the Odysseus application
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #include "custom_dynamic.h"
 #include "odysseus_command.h"
 #include "odysseus_parser.h"

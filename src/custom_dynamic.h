@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : custom_dynamic.h
+ * @Purpose : Header file for th e dynamic memory management functions
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #ifndef CUSTOM_DYNAMIC_H
 #define CUSTOM_DYNAMIC_H
 

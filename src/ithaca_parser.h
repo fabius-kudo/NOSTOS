@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : ithaca_parser.h
+ * @Purpose : Header file for the Ithaca parser
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #ifndef CODE_ITHACA_PARSER_H
 #define CODE_ITHACA_PARSER_H
 

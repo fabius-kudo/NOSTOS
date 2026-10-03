@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : island_parser.h
+ * @Purpose : Header file for the island parser
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #ifndef CODE_ISLAND_PARSER_H
 #define CODE_ISLAND_PARSER_H
 

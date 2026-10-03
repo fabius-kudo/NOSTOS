@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : island_main.c
+ * @Purpose : Main function for the Island application
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>

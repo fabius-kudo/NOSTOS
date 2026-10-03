@@ -1,3 +1,12 @@
+/***********************************************
+ *
+ * @File : odysseus_command.c
+ * @Purpose : Command handling for the Odysseus application
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #include "odysseus_command.h"
 #include <stdio.h>
 #include <stdlib.h>
