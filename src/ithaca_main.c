@@ -7,6 +7,7 @@
  *
  ***********************************************/
 
+// System Includes
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,51 +16,67 @@
 #include <fcntl.h>
 #include <signal.h>
 
+// Project Includes
 #include "ithaca_parser.h"
 
-static volatile int stop = 0;
+static volatile int gnStop = 0;
 
-void handle_exit(int sig) {
-    (void)sig; //used to avoid unused parameter warning
-    stop = 1;
+/***********************************************
+ *
+ * @Name: handleExit
+ * @Def: Signal handler function for SIGINT interrupt signal.
+ * @Arg: In: nSig received signal number
+ * @Ret: None.
+ *
+ ***********************************************/
+void handleExit(int nSig) {
+    (void)nSig;
+    gnStop = 1;
 }
 
+/***********************************************
+ *
+ * @Name: main
+ * @Def: Main entry point for the Ithaca application.
+ * @Arg: In: argc number of command line arguments
+ *       In: argv array of command line argument strings
+ * @Ret: Returns 0 on success, or non-zero status code on error.
+ *
+ ***********************************************/
 int main(int argc, char *argv[]) {
-    Ithaca ithaca;
-    Voyage *voyages = NULL;
-    int num_voyages = 0;
-    char *buf;
+    int nNumVoyages = 0;
+    int nLen = 0;
+    char *psBuf = NULL;
+    tIthaca stIthaca;
+    tVoyage *pstVoyages = NULL;
 
     if (argc != 3) {
         write(STDERR_FILENO, "Usage: ./ithaca <config.dat> <voyages.dat>\n", strlen("Usage: ./ithaca <config.dat> <voyages.dat>\n"));
         exit(EXIT_FAILURE);
     }
 
-    signal(SIGINT, handle_exit);
+    signal(SIGINT, handleExit);
 
-    ithaca = parseIthaca(argv[1]);
-    voyages = parseVoyages(argv[2], &num_voyages);
+    stIthaca = parseIthaca(argv[1]);
+    pstVoyages = parseVoyages(argv[2], &nNumVoyages);
 
-    int len = asprintf(&buf, "Ithaca initialized. %d voyages loaded.\nWaiting for Odysseus...\n", num_voyages);
-    if (len < 0) {
+    nLen = asprintf(&psBuf, "Ithaca initialized. %d voyages loaded.\nWaiting for Odysseus...\n", nNumVoyages);
+    if (nLen < 0) {
         write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
         exit(EXIT_FAILURE);
     } else {
-        write(STDOUT_FILENO, buf, len);
-        free(buf);
+        write(STDOUT_FILENO, psBuf, nLen);
+        free(psBuf);
     }
 
-    printIthaca(&ithaca);
-    printVoyages(voyages, num_voyages);
-
-    while (!stop) {
+    while (!gnStop) {
         pause();
     }
     
     write(STDOUT_FILENO, "\nIthaca closes the harbor.\n", strlen("\nIthaca closes the harbor.\n"));
 
-    freeIthaca(&ithaca);
-    freeVoyages(voyages, num_voyages);
+    freeIthaca(&stIthaca);
+    freeVoyages(pstVoyages, nNumVoyages);
 
     return 0;
 }

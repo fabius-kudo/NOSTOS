@@ -7,6 +7,7 @@
  *
  ***********************************************/
 
+// System Includes
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,60 +16,77 @@
 #include <fcntl.h>
 #include <signal.h>
 
+// Project Includes
 #include "island_parser.h"
 #include "SPHRAGIS Library-20260917/sphragis.h"
 
-static volatile int stop = 0;
+static volatile int gnStop = 0;
 
-void handle_exit(int sig) {
-    (void)sig; //used to avoid unused parameter warning
-    stop = 1;
+/***********************************************
+ *
+ * @Name: handleExit
+ * @Def: Signal handler function for SIGINT interrupt signal.
+ * @Arg: In: nSig received signal number
+ * @Ret: None.
+ *
+ ***********************************************/
+void handleExit(int nSig) {
+    (void)nSig;
+    gnStop = 1;
 }
 
+/***********************************************
+ *
+ * @Name: main
+ * @Def: Main entry point for the island application.
+ * @Arg: In: argc number of command line arguments
+ *       In: argv array of command line argument strings
+ * @Ret: Returns 0 on success, or non-zero status code on error.
+ *
+ ***********************************************/
 int main(int argc, char *argv[]) {
-    Island island;
-    Product *stock = NULL;
-    int num_products = 0;
-    char *buf;
+    int nNumProducts = 0;
+    int nLen = 0;
+    char *psBuf = NULL;
+    tProduct *pstStock = NULL;
+    tIsland stIsland;
 
     if (argc != 3) {
         write(STDERR_FILENO, "Usage: ./island <config.dat> <stock.dat>\n", strlen("Usage: ./island <config.dat> <stock.dat>\n"));
-        free(buf);
-        free(stock);
+        free(psBuf);
+        free(pstStock);
         exit(EXIT_FAILURE);
     }
 
-    signal(SIGINT, handle_exit);
+    signal(SIGINT, handleExit);
     
-    island = parseIsland(argv[1]);
-    stock = parseStock(argv[2], &num_products);
+    stIsland = parseIsland(argv[1]);
+    pstStock = parseStock(argv[2], &nNumProducts);
 
-    printIsland(&island);
+    printIsland(&stIsland);
 
-    if (filterRoutes(&island) < 0) {
+    if (filterRoutes(&stIsland) < 0) {
         write(STDERR_FILENO, "Error: invalid island configuration\n", strlen("Error: invalid island configuration\n"));
-        freeIsland(island);
-        free(stock);
-        exit(EXIT_FAILURE);}
+        freeIsland(stIsland);
+        free(pstStock);
+        exit(EXIT_FAILURE);
+    }
 
-    printIsland(&island);
-    printProducts(stock, num_products);
-
-    while (!stop) {
+    while (!gnStop) {
         pause();
     }
 
-    int len = asprintf(&buf, "\n%s closes its port.\n", island.name);
-    if (len < 0) {
+    nLen = asprintf(&psBuf, "\n%s closes its port.\n", stIsland.psName);
+    if (nLen < 0) {
         write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
         exit(EXIT_FAILURE);
     } else {
-        write(STDOUT_FILENO, buf, len);
-        free(buf);
+        write(STDOUT_FILENO, psBuf, nLen);
+        free(psBuf);
     }
 
-    free(stock);
-    freeIsland(island);
+    free(pstStock);
+    freeIsland(stIsland);
 
     return 0;
 }

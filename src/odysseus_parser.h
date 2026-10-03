@@ -10,30 +10,39 @@
 #ifndef CODE_ODYSSEUS_PARSER_H
 #define CODE_ODYSSEUS_PARSER_H
 
+// System Includes
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+// Project Includes
+#include "custom_dynamic.h"
+
+// Custom Type Definitions
 typedef struct {
-    char *product;
-    int quantity;
-} Food;
+    char *psProduct;
+    int nQuantity;
+} tFood;
 
 typedef struct {
-    char *name;
-    char *file_path;
+    char *psName;
+    char *psFilePath;
 
-    char *ithaca_ip;
-    int  ithaca_port;
+    char *psIthacaIp;
+    int nIthacaPort;
 
-    char *island_name;
-    char *island_ip;
-    int  island_port;
+    char *psIslandName;
+    char *psIslandIp;
+    int nIslandPort;
 
-    int  initial_money;
-    int  num_food_items;
-    Food *food_supplies;
-} Odysseus;
+    int nInitialMoney;
+    int nNumFoodItems;
+    tFood *pstFoodSupplies;
+} tOdysseus;
 
-Odysseus parseOdysseus(char *config_path);
-void freeOdysseus(Odysseus *od);
-
-void printOdysseus(const Odysseus *od);
+tOdysseus parseOdysseus(char *psConfigPath);
+void freeOdysseus(tOdysseus *pstOd);
 
 #endif //CODE_ODYSSEUS_PARSER_H

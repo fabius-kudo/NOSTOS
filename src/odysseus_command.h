@@ -10,26 +10,35 @@
 #ifndef CODE_ODYSSEUS_COMMAND_H
 #define CODE_ODYSSEUS_COMMAND_H
 
+// System Includes
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <unistd.h>
+
+// Constant Declarations
 #define MAX_ARGS 4
 
-typedef int (*CommandHandler)(int argc, char *argv[]);  
+// Custom Type Definitions
+typedef int (*tCommandHandler)(int nArgc, char *ppsArgv[]);
 
 typedef enum {
     ARG_NONE,
     ARG_NUMERIC,
     ARG_TEXT
-} ArgKind;
+} tArgKind;
 
 typedef struct {
-    const char     *word1;      
-    const char     *word2;      
-    int             numArgs;
-    ArgKind         argKinds[2]; 
-    const char     *usage;
-    CommandHandler  handler;
-} Command;
+    const char *psWord1;
+    const char *psWord2;
+    int nNumArgs;
+    tArgKind aArgKinds[2];
+    const char *psUsage;
+    tCommandHandler fHandler;
+} tCommand;
 
-void processLine(char *tokens[], int tokenCount);
-int tokenizeLine(char *line, char *argv[], int maxTokens);
+void processLine(char *ppsTokens[], int nTokenCount);
+int tokenizeLine(char *psLine, char *ppsArgv[], int nMaxTokens);
 
 #endif //CODE_ODYSSEUS_COMMAND_H

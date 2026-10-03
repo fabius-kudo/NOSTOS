@@ -8,22 +8,23 @@
  ***********************************************/
 
 #include "odysseus_command.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <strings.h>
 
-/*  --- Terminal commands ---   */
-
-// --- command functions
+/***********************************************
+ *
+ * @Name: cmdDef
+ * @Def: Default dummy command handler function.
+ * @Arg: In: argc count of command arguments
+ *       In: argv array of argument strings
+ * @Ret: Returns 0.
+ *
+ ***********************************************/
 static int cmd_def(int argc, char *argv[]){
     (void) argc;
     (void) argv;
     return 0;
 }
 
-static Command commands[] = {
+static tCommand g_astCommands[] = {
     { "CONNECT", "ITHACA", 0, { 0 }, "Usage: CONNECT ITHACA\n", cmd_def },
     { "LIST", "VOYAGES", 0, { 0 }, "Usage: LIST VOYAGES\n", cmd_def },
     { "ACCEPT", NULL, 1, { ARG_NUMERIC }, "Usage: ACCEPT <voyage_id>\n", cmd_def },
@@ -37,80 +38,123 @@ static Command commands[] = {
     { "CLAIM", NULL, 0, { 0 }, "Usage: CLAIM\n", cmd_def },
 };
 
-static const int numCommands = sizeof(commands) / sizeof(commands[0]);
+static const int gnNumCommands = sizeof(g_astCommands) / sizeof(g_astCommands[0]);
 
-static int isNumeric(const char *s) {
-    if (s == NULL || *s == '\0') {
+/***********************************************
+ *
+ * @Name: isNumeric
+ * @Def: Checks if a given string contains only numeric digits.
+ * @Arg: In: psStr string to validate
+ * @Ret: Returns 1 if numeric, 0 otherwise.
+ *
+ ***********************************************/
+static int isNumeric(const char *psStr) {
+    if (psStr == NULL || *psStr == '\0') {
         return 0;
     }
-    for (int i = 0; s[i] != '\0'; i++) {
-        if (s[i] < '0' || s[i] > '9') {
+    for (int i = 0; psStr[i] != '\0'; i++) {
+        if (psStr[i] < '0' || psStr[i] > '9') {
             return 0;
         }
     }
     return 1;
 }
 
-int tokenizeLine(char *line, char *argv[], int maxTokens) {
-    int argc = 0;
-    char *token = strtok(line, " \t");
+/***********************************************
+ *
+ * @Name: tokenizeLine
+ * @Def: Tokenizes a input line string by spaces and tabs into an argument array.
+ * @Arg: In: psLine raw input line string
+ *       Out: argv array to store tokenized string pointers
+ *       In: nMaxTokens maximum allowed tokens
+ * @Ret: Returns total number of extracted tokens.
+ *
+ ***********************************************/
+int tokenizeLine(char *psLine, char *argv[], int nMaxTokens) {
+    int nArgc = 0;
+    char *psToken = strtok(psLine, " \t");
 
-    while (token != NULL && argc < maxTokens) {
-        argv[argc++] = token;
-        token = strtok(NULL, " \t");
+    while (psToken != NULL && nArgc < nMaxTokens) {
+        argv[nArgc++] = psToken;
+        psToken = strtok(NULL, " \t");
     }
-    return argc;
+    return nArgc;
 }
-static Command *findCommand(char *tokens[], int tokenCount, int *nameWords) {
-    for (int i = 0; i < numCommands; i++) {
-        if (commands[i].word2 != NULL) {
-            if (tokenCount >= 2 &&
-                strcasecmp(tokens[0], commands[i].word1) == 0 &&
-                strcasecmp(tokens[1], commands[i].word2) == 0) {
-                *nameWords = 2;
-                return &commands[i];
+
+/***********************************************
+ *
+ * @Name: findCommand
+ * @Def: Matches tokenized input words against available registered commands.
+ * @Arg: In: ppsTokens array of token strings
+ *       In: nTokenCount total number of input tokens
+ *       Out: pnNameWords pointer to store matching command word count (1 or 2)
+ * @Ret: Returns pointer to matched tCommand structure, or NULL if non-existent.
+ *
+ ***********************************************/
+static tCommand *findCommand(char *ppsTokens[], int nTokenCount, int *pnNameWords) {
+    for (int i = 0; i < gnNumCommands; i++) {
+        if (g_astCommands[i].psWord2 != NULL) {
+            if (nTokenCount >= 2 &&
+                strcasecmp(ppsTokens[0], g_astCommands[i].psWord1) == 0 &&
+                strcasecmp(ppsTokens[1], g_astCommands[i].psWord2) == 0) {
+                *pnNameWords = 2;
+                return &g_astCommands[i];
             }
         }
     }
-    for (int i = 0; i < numCommands; i++) {
-        if (commands[i].word2 == NULL) {
-            if (tokenCount >= 1 && strcasecmp(tokens[0], commands[i].word1) == 0) {
-                *nameWords = 1;
-                return &commands[i];
+    for (int i = 0; i < gnNumCommands; i++) {
+        if (g_astCommands[i].psWord2 == NULL) {
+            if (nTokenCount >= 1 && strcasecmp(ppsTokens[0], g_astCommands[i].psWord1) == 0) {
+                *pnNameWords = 1;
+                return &g_astCommands[i];
             }
         }
     }
     return NULL;
 }
 
-void processLine(char *tokens[], int tokenCount) {
-    if (tokenCount == 0) {
+/***********************************************
+ *
+ * @Name: processLine
+ * @Def: Parses input tokens, validates arguments, and invokes target command handler.
+ * @Arg: In: ppsTokens tokenized argument strings
+ *       In: nTokenCount count of tokenized argument strings
+ * @Ret: None.
+ *
+ ***********************************************/
+void processLine(char *ppsTokens[], int nTokenCount) {
+    int nNameWords = 0;
+    int nGivenArgs = 0;
+    int i = 0;
+    char **ppsArgs = NULL;
+    tCommand *pstCmd = NULL;
+    
+    if (nTokenCount == 0) {
         return;
     }
 
-    int nameWords = 0;
-    Command *cmd = findCommand(tokens, tokenCount, &nameWords);
+    pstCmd = findCommand(ppsTokens, nTokenCount, &nNameWords);
 
-    if (cmd == NULL) {
+    if (pstCmd == NULL) {
         write(STDOUT_FILENO, "Unknown command\n", strlen("Unknown command\n"));
         return;
     }
 
-    char **args = &tokens[nameWords];
-    int givenArgs = tokenCount - nameWords;
+    ppsArgs = &ppsTokens[nNameWords];
+    nGivenArgs = nTokenCount - nNameWords;
 
-    if (givenArgs != cmd->numArgs) {
-        write(STDOUT_FILENO, cmd->usage, strlen(cmd->usage));
+    if (nGivenArgs != pstCmd->nNumArgs) {
+        write(STDOUT_FILENO, pstCmd->psUsage, strlen(pstCmd->psUsage));
         return;
     }
 
-    for (int i = 0; i < givenArgs; i++) {
-        if (cmd->argKinds[i] == ARG_NUMERIC && !isNumeric(args[i])) {
-            write(STDOUT_FILENO, cmd->usage, strlen(cmd->usage));
+    for (int i = 0; i < nGivenArgs; i++) {
+        if (pstCmd->aArgKinds[i] == ARG_NUMERIC && !isNumeric(ppsArgs[i])) {
+            write(STDOUT_FILENO, pstCmd->psUsage, strlen(pstCmd->psUsage));
             return;
         }
     }
 
-    cmd->handler(givenArgs, args);
+    pstCmd->fHandler(nGivenArgs, ppsArgs);
     write(STDOUT_FILENO, "Command OK\n", strlen("Command OK\n"));
 }

@@ -9,61 +9,84 @@
 
 #include "custom_dynamic.h"
 
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
+/***********************************************
+ *
+ * @Name: readDynamic
+ * @Def: Reads characters dynamically from a file descriptor into a buffer.
+ * @Arg: In: nFd file descriptor to read from
+ *       In: nUntilNewline flag indicating whether to stop at newline
+ * @Ret: Returns pointer to dynamically allocated string, or NULL on failure.
+ *
+ ***********************************************/
+char *readDynamic(int nFd, int nUntilNewline) {
+    int nCap = 16;
+    int nLen = 0;
+    int nBytesRead = 0;
+    char cChar = '\0';
+    char *psBuf = (char *)malloc(nCap);
+    char *psTmp = NULL;
 
-char *readDynamic(int fd, int untilNewline) {
-    int cap = 16;
-    int len = 0;
-    char *buf = malloc(cap);
-    if (buf == NULL) {
+    if (psBuf == NULL) {
         return NULL;
     }
 
     while (1) {
-        char c;
-        int n = read(fd, &c, 1);
+        nBytesRead = read(nFd, &cChar, 1);
 
-        if (n < 0) {                //error or interrupted by signal
-            free(buf);
+        //error or interrupted by signal
+        if (nBytesRead < 0) {
+            free(psBuf);
             return NULL;
         }
-        if (n == 0) {               //EOF
-            if (len == 0) {
-                free(buf);
+        //EOF check
+        if (nBytesRead == 0) {
+            if (nLen == 0) {
+                free(psBuf);
                 return NULL; 
             }
             break;
         }
-        if (c == '\n' && untilNewline) {
+
+        if (cChar == '\n' && nUntilNewline) {
             break;
         }
 
-        if (len + 1 >= cap) {  //for the \0
-            cap *= 2;
-            char *tmp = realloc(buf, cap);
-            if (tmp == NULL) {
-                free(buf);
+          //for the \0
+        if (nLen + 1 >= nCap) {
+            nCap *= 2;
+            psTmp = realloc(psBuf, nCap);
+            if (psTmp == NULL) {
+                free(psBuf);
                 return NULL;
             }
-            buf = tmp;
+            psBuf = psTmp;
         }
-        buf[len++] = c;
+        psBuf[nLen++] = cChar;
     }
 
-    buf[len] = '\0';
-    return buf;
+    psBuf[nLen] = '\0';
+    return psBuf;
 }
 
+/***********************************************
+ *
+ * @Name: dupString
+ * @Def: Creates a duplicate of a given NULL-terminated string.
+ * @Arg: In: psSource pointer to the source string to duplicate
+ * @Ret: Returns pointer to the duplicated string, or NULL on error.
+ *
+ ***********************************************/
+char *dupString(const char *psSource) {
+    char *psCopy = NULL;
 
-char *dupString(const char *s) {
-    if (s == NULL) return NULL;
-    char *copy = malloc(strlen(s) + 1); // \0
-    if (copy == NULL) {
+    if (psSource == NULL) return NULL;
+
+    psCopy = malloc(strlen(psSource) + 1); // \0
+
+    if (psCopy == NULL) {
         write(STDERR_FILENO, "Error: malloc failed in dupString\n", strlen("Error: malloc failed in dupString\n"));
         return NULL;                 
     }
-    strcpy(copy, s);
-    return copy;
+    strcpy(psCopy, psSource);
+    return psCopy;
 }
