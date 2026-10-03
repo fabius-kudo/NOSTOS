@@ -29,6 +29,7 @@ typedef struct {
 Island parseIsland(char *islands_path);
 void freeIsland(Island island);
 Product *parseStock(char *stock_path, int *num_products);
+int filterRoutes(Island *island) ;
 
 void printIsland(const Island *island);
 void printProducts(const Product *products, int num_products);

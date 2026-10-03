@@ -24,6 +24,8 @@ int main(int argc, char *argv[]) {
 
     if (argc != 3) {
         write(STDERR_FILENO, "Usage: ./island <config.dat> <stock.dat>\n", strlen("Usage: ./island <config.dat> <stock.dat>\n"));
+        free(buf);
+        free(stock);
         exit(EXIT_FAILURE);
     }
 
@@ -32,16 +34,13 @@ int main(int argc, char *argv[]) {
     island = parseIsland(argv[1]);
     stock = parseStock(argv[2], &num_products);
 
-    //TODO add this
-    // int new_num_routes = SPHRAGIS_filter_island_configuration(&island);
+    printIsland(&island);
 
-    // if (new_num_routes == SPHRAGIS_ERROR_INVALID_ISLAND) {
-    //     write(STDERR_FILENO, "Invalid island route configuration.\n", strlen("Invalid island route configuration.\n"));
-    // } else if (new_num_routes == SPHRAGIS_ERROR_INVALID_CONNECTION)  {
-    //     write(STDERR_FILENO, "Invalid connection in island configuration.\n", strlen("Invalid connection in island configuration.\n"));
-    // } else {
-    //     island.num_routes = new_num_routes;
-    // }
+    if (filterRoutes(&island) < 0) {
+        write(STDERR_FILENO, "Error: invalid island configuration\n", strlen("Error: invalid island configuration\n"));
+        freeIsland(island);
+        free(stock);
+        exit(EXIT_FAILURE);}
 
     printIsland(&island);
     printProducts(stock, num_products);

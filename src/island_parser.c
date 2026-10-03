@@ -48,10 +48,10 @@ Island parseIsland(char *islands_path) {
     free(bufCopy);
 
     // Real pass
-    island.name       = dupString(strtok(buf, "\n"));
-    island.path       = dupString(strtok(NULL, "\n"));
+    island.name = dupString(strtok(buf, "\n"));
+    island.path = dupString(strtok(NULL, "\n"));
     island.ip_address = dupString(strtok(NULL, " \n"));
-    island.port       = atoi(strtok(NULL, " \n"));
+    island.port = atoi(strtok(NULL, " \n"));
     island.max_capacity = atoi(strtok(NULL, " \n"));
     strtok(NULL, "\n");                  // consume the "--- ROUTES ---" line
 
@@ -111,6 +111,50 @@ Product *parseStock(char *stock_path, int *num_products) {
     return products;
 }
 
+int filterRoutes(Island *island) {
+    SPHRAGIS_Island tmp;
+    tmp.name = island->name;
+    tmp.known_island_count = island->num_routes;
+    tmp.known_islands = NULL;
+
+    if (island->num_routes > 0) {
+        tmp.known_islands = calloc(island->num_routes, sizeof(char *));
+        if (!tmp.known_islands) return -1;
+
+        for (int i = 0; i < island->num_routes; i++) {
+            tmp.known_islands[i] = dupString(island->routes[i].name);
+            if (!tmp.known_islands[i]) {
+                for (int j = 0; j < i; j++) free(tmp.known_islands[j]);
+                free(tmp.known_islands);
+                return -1;
+            }
+        }
+    }
+
+    int n = SPHRAGIS_filter_island_configuration(&tmp);
+    if (n < 0) {                                   // invalid island or array/count
+        for (int i = 0; i < island->num_routes; i++) free(tmp.known_islands[i]);
+        free(tmp.known_islands);
+        return -1;
+    }
+
+    // Survivors keep their order, so a single index into them is enough
+    int k = 0;
+    for (int i = 0; i < island->num_routes; i++) {
+        if (k < n && strcmp(tmp.known_islands[k], island->routes[i].name) == 0) {
+            island->routes[k++] = island->routes[i];   // compact in place
+        } else {
+            free(island->routes[i].name);              // rejected route
+            free(island->routes[i].ip_address);
+        }
+    }
+    island->num_routes = n;
+
+    for (int i = 0; i < n; i++) free(tmp.known_islands[i]);   // our remaining copies
+    free(tmp.known_islands);
+    return n;
+}
+
 //TEST FUNCTION, ILLEGAL TODO:REMOVE
 void printIsland(const Island *island) {
     printf("Island Name: %s\n", island->name);
@@ -123,7 +167,7 @@ void printIsland(const Island *island) {
         printf("Route %d:\n", i + 1);
         printf("  Name: %s\n", island->routes[i].name);
         printf("  IP Address: %s\n", island->routes[i].ip_address);
-        printf("  Port: %d\n", island->routes[i].port);
+        printf("  Port: %d\n\n\n", island->routes[i].port);
     }
 }
 
