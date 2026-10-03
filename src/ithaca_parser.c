@@ -1,4 +1,5 @@
 #include "ithaca_parser.h"
+#include "custom_dynamic.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,109 +9,117 @@
 
 Ithaca parseIthaca(char *config_path) {
     Ithaca ithaca;
+    memset(&ithaca, 0, sizeof(ithaca));
+
     int fd = open(config_path, O_RDONLY);
     if (fd < 0) {
-        //TODO: add error message
+        write(STDERR_FILENO, "Error: failed opening config file\n", strlen("Error: failed opening config file\n"));
         exit(EXIT_FAILURE);
     }
 
-    //Read whole file into buffer
-    char buf[1000]; //TODO: make dynamic
-    int total = 0, n;
-    while ((n = read(fd, &buf[total], sizeof(buf) - total - 1)) > 0) {
-        total += n;
-    }
+    char *buf = readDynamic(fd, 0);
     close(fd);
-
-    if (n < 0) {
-        write(STDERR_FILENO, "Error: failed reading config file\n", 35);
+    if (!buf) {
+        write(STDERR_FILENO, "Error: malloc failed opening config file\n", strlen("Error: malloc failed opening config file\n"));
         exit(EXIT_FAILURE);
     }
-    buf[total] = '\0';
 
-    // Line 1: name
-    char *line = strtok(buf, "\n");
-    strncpy(ithaca.serverName, line, sizeof(ithaca.serverName) - 1);
-    ithaca.serverName[sizeof(ithaca.serverName) - 1] = '\0';
+    ithaca.serverName = dupString(strtok(buf, " \n"));
+    ithaca.path       = dupString(strtok(NULL, " \n"));
+    ithaca.ip_address = dupString(strtok(NULL, " \n"));
+    ithaca.port       = atoi(strtok(NULL, " \n"));
 
-    // Line 2: path
-    line = strtok(NULL, "\n");
-    strncpy(ithaca.path, line, sizeof(ithaca.path) - 1);
-    ithaca.path[sizeof(ithaca.path) - 1] = '\0';
-
-    // Line 3: IP + port
-    line = strtok(NULL, "\n");
-    char *tok = strtok(line, " ");
-    strncpy(ithaca.ip_address, tok, sizeof(ithaca.ip_address) - 1);
-    ithaca.ip_address[sizeof(ithaca.ip_address) - 1] = '\0';
-    tok = strtok(NULL, " ");
-    ithaca.port = atoi(tok);
-
+    free(buf);
     return ithaca;
+}
+
+void freeIthaca(Ithaca *ithaca) {
+    free(ithaca->serverName);
+    free(ithaca->path);
+    free(ithaca->ip_address);
+    memset(ithaca, 0, sizeof(*ithaca));
 }
 
 Voyage *parseVoyages(char *voyages_path, int *num_voyages) {
     int fd = open(voyages_path, O_RDONLY);
     if (fd < 0) {
-        //TODO: make real error message
+        write(STDERR_FILENO, "Error: failed opening voyages file\n", strlen("Error: failed opening voyages file\n"));
         exit(EXIT_FAILURE);
     }
 
-    // Read whole file into buffer
-    char buf[4000]; //TODO: make dynamic
-    int total = 0, n;
-    while ((n = read(fd, &buf[total], sizeof(buf) - total - 1)) > 0) {
-        total += n;
-    }
+    char *buf = readDynamic(fd, 0);
     close(fd);
-
-    if (n < 0) {
-        write(STDERR_FILENO, "Error: failed reading voyages file\n", 36);
+    if (!buf) {
+        write(STDERR_FILENO, "Error: malloc failed opening voyages file\n", strlen("Error: malloc failed opening voyages file\n"));
         exit(EXIT_FAILURE);
     }
-    buf[total] = '\0';
 
-    // First pass: count lines
-    char buf_copy[4000];
-    strncpy(buf_copy, buf, sizeof(buf_copy) - 1);
-    buf_copy[sizeof(buf_copy) - 1] = '\0';
+    // First pass: count lines, using a copy since strtok is destructive
+    char *bufCopy = dupString(buf);
+    if (!bufCopy) {
+        write(STDERR_FILENO, "Error: malloc failed\n", strlen("Error: malloc failed\n"));
+        exit(EXIT_FAILURE);
+    }
 
     int count = 0;
-    char *line = strtok(buf_copy, "\n");
+    char *line = strtok(bufCopy, "\n");
     while (line != NULL) {
         count++;
         line = strtok(NULL, "\n");
     }
+    free(bufCopy);
 
     Voyage *voyages = malloc(sizeof(Voyage) * count);
     if (!voyages && count > 0) {
-        write(STDERR_FILENO, "Error: malloc failed\n", 21);
+        write(STDERR_FILENO, "Error: malloc failed\n", strlen("Error: malloc failed\n"));
         exit(EXIT_FAILURE);
     }
-    
+
     // Second pass: parse each line into a Voyage
-    line = strtok(buf, "\n");
-    int i = 0;
-    while (line != NULL) {
-        char *tok = strtok(line, " ");
-        strncpy(voyages[i].object, tok, sizeof(voyages[i].object) - 1);
-        voyages[i].object[sizeof(voyages[i].object) - 1] = '\0';
-
-        tok = strtok(NULL, " ");
-        strncpy(voyages[i].file, tok, sizeof(voyages[i].file) - 1);
-        voyages[i].file[sizeof(voyages[i].file) - 1] = '\0';
-
-        tok = strtok(NULL, " ");
-        strncpy(voyages[i].destination, tok, sizeof(voyages[i].destination) - 1);
-        voyages[i].destination[sizeof(voyages[i].destination) - 1] = '\0';
-
-        tok = strtok(NULL, " ");
-        voyages[i].reward = atoi(tok);
-
-        line = strtok(NULL, "\n");
-        i++;
+    char *tok = strtok(buf, " \n"); 
+    for (int i = 0; i < count; i++) {
+        voyages[i].object      = dupString(tok);
+        voyages[i].file        = dupString(strtok(NULL, " \n"));
+        voyages[i].destination = dupString(strtok(NULL, " \n"));
+        voyages[i].reward      = atoi(strtok(NULL, " \n"));
+        tok = strtok(NULL, " \n");
     }
 
+    free(buf);
     *num_voyages = count;
     return voyages;
+}
+
+void freeVoyages(Voyage *voyages, int num_voyages) {
+    for (int i = 0; i < num_voyages; i++) {
+        free(voyages[i].object);
+        free(voyages[i].file);
+        free(voyages[i].destination);
+    }
+    free(voyages);
+}
+
+//TEST FUNCTION, ILLEGAL TODO:REMOVE
+void printIthaca(const Ithaca *ithaca) {
+    printf("--- Ithaca ---\n");
+    printf("serverName: [%s]\n", ithaca->serverName);
+    printf("path:       [%s]\n", ithaca->path);
+    printf("address:    [%s]:%d\n", ithaca->ip_address, ithaca->port);
+    printf("--------------\n");
+    fflush(stdout);
+}
+
+//TEST FUNCTION, ILLEGAL TODO:REMOVE
+void printVoyages(const Voyage *voyages, int num_voyages) {
+    printf("--- Voyages (%d) ---\n", num_voyages);
+    for (int i = 0; i < num_voyages; i++) {
+        printf("  [%d] object=[%s] file=[%s] destination=[%s] reward=%d\n",
+               i,
+               voyages[i].object,
+               voyages[i].file,
+               voyages[i].destination,
+               voyages[i].reward);
+    }
+    printf("--------------------\n");
+    fflush(stdout);
 }

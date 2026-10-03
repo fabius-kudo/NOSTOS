@@ -49,9 +49,10 @@ char *readDynamic(int fd, int untilNewline) {
 
 
 char *dupString(const char *s) {
+    if (s == NULL) return NULL;
     char *copy = malloc(strlen(s) + 1); // \0
     if (copy == NULL) {
-        write(STDERR_FILENO, "Error: malloc failed in dupString\n", 35);
+        write(STDERR_FILENO, "Error: malloc failed in dupString\n", strlen("Error: malloc failed in dupString\n"));
         return NULL;                 
     }
     strcpy(copy, s);
