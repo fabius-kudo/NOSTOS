@@ -1,11 +1,11 @@
 #ifndef CODE_ISLAND_PARSER_H
 #define CODE_ISLAND_PARSER_H
 
-#define MAX_ROUTES 50
+#define MAX_NAME 100
 
 //Todo: maybe need a product.h file
 typedef struct {
-    char *name;
+    char name[MAX_NAME];
     int quantity;
     int price;
 } Product;
@@ -29,6 +29,8 @@ typedef struct {
 Island parseIsland(char *islands_path);
 void freeIsland(Island island);
 Product *parseStock(char *stock_path, int *num_products);
+
 void printIsland(const Island *island);
+void printProducts(const Product *products, int num_products);
 
 #endif //CODE_ISLAND_PARSER_H

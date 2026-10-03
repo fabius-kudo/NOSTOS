@@ -42,22 +42,15 @@ int main(int argc, char *argv[]) {
     // } else {
     //     island.num_routes = new_num_routes;
     // }
-    
-    int len = asprintf(&buf, "Island %s initialized.\nPort capacity: %d.\n%d sea routes loaded.\n%d products available.\n", island.name, island.max_capacity, island.num_routes, num_products);
-    if (len < 0) {
-        write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
-        exit(EXIT_FAILURE);
-    } else {
-        write(STDOUT_FILENO, buf, len);
-    }
 
     printIsland(&island);
+    printProducts(stock, num_products);
 
     while (!stop) {
         pause();
     }
 
-    len = asprintf(&buf, "\n%s closes its port.\n", island.name);
+    int len = asprintf(&buf, "\n%s closes its port.\n", island.name);
     if (len < 0) {
         write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
         exit(EXIT_FAILURE);
