@@ -71,6 +71,15 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    nLen = asprintf(&psBuf, "Island %s initialized.\nPort capacity: %d.\n%d sea routes loaded.\n%d products available.\n", stIsland.psName, stIsland.nMaxCapacity, stIsland.nNumRoutes, nNumProducts);
+    if (nLen < 0) {
+        write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
+        exit(EXIT_FAILURE);
+    } else {
+        write(STDOUT_FILENO, psBuf, nLen);
+        free(psBuf);
+    }
+
     while (!gnStop) {
         pause();
     }
