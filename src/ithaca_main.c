@@ -63,6 +63,8 @@ int main(int argc, char *argv[]) {
     nLen = asprintf(&psBuf, "Ithaca initialized. %d voyages loaded.\nWaiting for Odysseus...\n", nNumVoyages);
     if (nLen < 0) {
         write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
+        freeIthaca(&stIthaca);
+        freeVoyages(pstVoyages, nNumVoyages);
         exit(EXIT_FAILURE);
     } else {
         write(STDOUT_FILENO, psBuf, nLen);

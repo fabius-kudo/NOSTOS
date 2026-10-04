@@ -33,7 +33,7 @@ static volatile int gnStop = 0;
  ***********************************************/
 void handleExit(int nSig) {
     (void)nSig;
-    // Stops extra reads from stdin
+    // Stops extra reads from stdin, so that ctrl c closes immediately instead of waiting for a newline
     close(STDIN_FILENO);
     gnStop = 1;
 }
@@ -67,6 +67,7 @@ int main(int argc, char *argv[]) {
     nLen = asprintf(&psBuf, "Odysseus %s is ready to sail.\n", stOdysseus.psName);
     if (nLen < 0) {
         write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
+        freeOdysseus(&stOdysseus);
         exit(EXIT_FAILURE);
     } else {
         write(STDOUT_FILENO, psBuf, nLen);
