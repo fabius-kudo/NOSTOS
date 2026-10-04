@@ -50,6 +50,8 @@ int main(int argc, char *argv[]) {
     int nTokenCount = 0;
     char *psLine = NULL;
     char *apsTokens[MAX_ARGS];
+    int nLen = 0;
+    char *psBuf = NULL;
     tOdysseus stOdysseus;
     
     if (argc != 2) {
@@ -61,6 +63,14 @@ int main(int argc, char *argv[]) {
 
     stOdysseus = parseOdysseus(argv[1]);
 
+     nLen = asprintf(&psBuf, "Odysseus %s is ready to sail.", stOdysseus.psName);
+    if (nLen < 0) {
+        write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
+        exit(EXIT_FAILURE);
+    } else {
+        write(STDOUT_FILENO, psBuf, nLen);
+        free(psBuf);
+    }
 
     while (!gnStop && (psLine = readDynamic(STDIN_FILENO, 1)) != NULL) {
         nTokenCount = tokenizeLine(psLine, apsTokens, MAX_ARGS);
