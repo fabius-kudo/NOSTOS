@@ -29,15 +29,15 @@ build/ithaca.o: src/ithaca_main.c src/ithaca_parser.h
 	gcc $(CFLAGS) -c src/ithaca_main.c -o build/ithaca.o
 
 odysseus: build/odysseus.o build/odysseus_parser.o build/odysseus_command.o build/custom_dynamic.o
-	gcc build/odysseus.o build/odysseus_parser.o build/odysseus_command.o build/custom_dynamic.o -g -o build/odysseus -lpthread
+	gcc build/odysseus.o build/odysseus_parser.o build/odysseus_command.o build/custom_dynamic.o -g -o odysseus -lpthread
 
 island: build/island.o build/island_parser.o src/SPHRAGIS\ Library-20260917/sphragis.o build/custom_dynamic.o
-	gcc build/island.o build/island_parser.o src/SPHRAGIS\ Library-20260917/sphragis.o build/custom_dynamic.o -g -o build/island -lpthread
+	gcc build/island.o build/island_parser.o src/SPHRAGIS\ Library-20260917/sphragis.o build/custom_dynamic.o -g -o island -lpthread
 
 ithaca: build/ithaca.o build/ithaca_parser.o build/custom_dynamic.o
-	gcc build/ithaca.o build/ithaca_parser.o build/custom_dynamic.o -g -o build/ithaca -lpthread
+	gcc build/ithaca.o build/ithaca_parser.o build/custom_dynamic.o -g -o ithaca -lpthread
 
 all: odysseus island ithaca
 
 clean:
-	rm -f build/*.o build/odysseus build/island build/ithaca
+	rm -f build/*.o odysseus island ithaca
