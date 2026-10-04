@@ -8,6 +8,7 @@
  ***********************************************/
 
 // System Includes
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,7 +64,7 @@ int main(int argc, char *argv[]) {
 
     stOdysseus = parseOdysseus(argv[1]);
 
-     nLen = asprintf(&psBuf, "Odysseus %s is ready to sail.", stOdysseus.psName);
+    nLen = asprintf(&psBuf, "Odysseus %s is ready to sail.\n", stOdysseus.psName);
     if (nLen < 0) {
         write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
         exit(EXIT_FAILURE);
