@@ -22,7 +22,8 @@ tOdysseus parseOdysseus(char * psConfigPath) {
     char *psBuf = NULL;
     tOdysseus stOd;
     
-    memset(&stOd, 0, sizeof(stOd)); //like malloc and all pointers NULL
+    //like malloc and all pointers NULL
+    memset(&stOd, 0, sizeof(stOd));
 
     nFd = open(psConfigPath, O_RDONLY);
     if (nFd < 0) {
@@ -59,8 +60,9 @@ tOdysseus parseOdysseus(char * psConfigPath) {
         stOd.pstFoodSupplies[i].psProduct  = dupString(strtok(NULL, " \n"));
         stOd.pstFoodSupplies[i].nQuantity = atoi(strtok(NULL, " \n"));
     }
-
-    free(psBuf);   //free after copies made
+    
+    //free after copies made
+    free(psBuf);   
     return stOd;
 
 }

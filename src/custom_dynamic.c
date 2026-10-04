@@ -51,7 +51,7 @@ char *readDynamic(int nFd, int nUntilNewline) {
             break;
         }
 
-          //for the \0
+        //for the \0
         if (nLen + 1 >= nCap) {
             nCap *= 2;
             psTmp = realloc(psBuf, nCap);
@@ -81,7 +81,8 @@ char *dupString(const char *psSource) {
 
     if (psSource == NULL) return NULL;
 
-    psCopy = malloc(strlen(psSource) + 1); // \0
+    // malloc includes /0
+    psCopy = malloc(strlen(psSource) + 1);
 
     if (psCopy == NULL) {
         write(STDERR_FILENO, "Error: malloc failed in dupString\n", strlen("Error: malloc failed in dupString\n"));

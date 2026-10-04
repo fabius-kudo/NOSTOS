@@ -22,6 +22,7 @@ tIthaca parseIthaca(char *psConfigPath) {
     char *psBuf = NULL;
     tIthaca stIthaca;
     
+    // Initialize the tIthaca structure to zeros
     memset(&stIthaca, 0, sizeof(stIthaca));
 
     nFd = open(psConfigPath, O_RDONLY);
@@ -101,10 +102,10 @@ tVoyage *parseVoyages(char *psVoyagesPath, int *pnNumVoyages) {
         exit(EXIT_FAILURE);
     }
 
-    char *line = strtok(psBufCopy, "\n");
-    while (line != NULL) {
+    psLine = strtok(psBufCopy, "\n");
+    while (psLine != NULL) {
         nCount++;
-        line = strtok(NULL, "\n");
+        psLine = strtok(NULL, "\n");
     }
     free(psBufCopy);
 
@@ -117,10 +118,10 @@ tVoyage *parseVoyages(char *psVoyagesPath, int *pnNumVoyages) {
     // Second pass: parse each line into a Voyage
     psTok = strtok(psBuf, " \n"); 
     for (int i = 0; i < nCount; i++) {
-        pstVoyages[i].psObject      = dupString(psTok);
-        pstVoyages[i].psFile        = dupString(strtok(NULL, " \n"));
+        pstVoyages[i].psObject = dupString(psTok);
+        pstVoyages[i].psFile = dupString(strtok(NULL, " \n"));
         pstVoyages[i].psDestination = dupString(strtok(NULL, " \n"));
-        pstVoyages[i].nReward       = atoi(strtok(NULL, " \n"));
+        pstVoyages[i].nReward = atoi(strtok(NULL, " \n"));
         psTok = strtok(NULL, " \n");
     }
 

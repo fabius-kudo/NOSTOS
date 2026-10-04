@@ -63,8 +63,7 @@ int main(int argc, char *argv[]) {
     stIsland = parseIsland(argv[1]);
     pstStock = parseStock(argv[2], &nNumProducts);
 
-    printIsland(&stIsland);
-
+    // Validate island configuration using SPHRAGIS library
     if (filterRoutes(&stIsland) < 0) {
         write(STDERR_FILENO, "Error: invalid island configuration\n", strlen("Error: invalid island configuration\n"));
         freeIsland(stIsland);

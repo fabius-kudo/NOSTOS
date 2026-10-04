@@ -18,6 +18,7 @@
  * @Ret: Returns 0.
  *
  ***********************************************/
+//Will be replaced with actual functions for each command.
 static int cmd_def(int argc, char *argv[]){
     (void) argc;
     (void) argv;
@@ -125,7 +126,6 @@ static tCommand *findCommand(char *ppsTokens[], int nTokenCount, int *pnNameWord
 void processLine(char *ppsTokens[], int nTokenCount) {
     int nNameWords = 0;
     int nGivenArgs = 0;
-    int i = 0;
     char **ppsArgs = NULL;
     tCommand *pstCmd = NULL;
     

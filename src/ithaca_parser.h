@@ -37,7 +37,6 @@ typedef struct {
 
 tIthaca parseIthaca(char *config_path);
 void freeIthaca(tIthaca *ithaca);
-
 tVoyage *parseVoyages(char *voyages_path, int *num_voyages);
 void freeVoyages(tVoyage *voyages, int num_voyages);
 

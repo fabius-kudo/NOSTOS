@@ -6,8 +6,8 @@
  * @Date : 3/10/26
  *
  ***********************************************/
-#include "island_parser.h"
 
+#include "island_parser.h"
 
 /***********************************************
  *
@@ -60,13 +60,13 @@ tIsland parseIsland(char *psIslandsPath) {
     }
     free(psBufCopy);
 
-    // Real pass
+    // Real pass, consume the "--- ROUTES ---" line
     stIsland.psName = dupString(strtok(psBuf, "\n"));
     stIsland.psPath = dupString(strtok(NULL, "\n"));
     stIsland.psIpAddress = dupString(strtok(NULL, " \n"));
     stIsland.nPort = atoi(strtok(NULL, " \n"));
     stIsland.nMaxCapacity = atoi(strtok(NULL, " \n"));
-    strtok(NULL, "\n");                  // consume the "--- ROUTES ---" line
+    strtok(NULL, "\n");               
 
     stIsland.pstRoutes = malloc(sizeof(tRoute) * nCount);
     if (!stIsland.pstRoutes && nCount > 0) {
@@ -176,25 +176,27 @@ int filterRoutes(tIsland *pstIsland) {
     }
 
     nRes = SPHRAGIS_filter_island_configuration(&stTmp);
-    if (nRes < 0) {                                   // invalid island or array/count
+    // invalid island or array/count
+    if (nRes < 0) {                                   
         for (int i = 0; i < pstIsland->nNumRoutes; i++) free(stTmp.known_islands[i]);
         free(stTmp.known_islands);
         return -1;
     }
 
-    // Survivors keep their order, so a single index into them is enough
-    int k = 0;
+    // move surviving routes to the front of the array and free rejected ones
     for (int i = 0; i < pstIsland->nNumRoutes; i++) {
-        if (k < nRes && strcmp(stTmp.known_islands[k], pstIsland->pstRoutes[i].psName) == 0) {
-            pstIsland->pstRoutes[k++] = pstIsland->pstRoutes[i];   // compact in place
+        if (nK < nRes && strcmp(stTmp.known_islands[nK], pstIsland->pstRoutes[i].psName) == 0) {
+            pstIsland->pstRoutes[nK++] = pstIsland->pstRoutes[i];   
         } else {
-            free(pstIsland->pstRoutes[i].psName);              // rejected route
+            free(pstIsland->pstRoutes[i].psName);              
             free(pstIsland->pstRoutes[i].psIpAddress);
         }
     }
     pstIsland->nNumRoutes = nRes;
 
-    for (int i = 0; i < nRes; i++) free(stTmp.known_islands[i]);   // our remaining copies
+    // free remaining copies
+    for (int i = 0; i < nRes; i++) free(stTmp.known_islands[i]);
     free(stTmp.known_islands);
+
     return nRes;
 }

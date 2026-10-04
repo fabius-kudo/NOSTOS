@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-char *readDynamic(int nFd, int nUntilNewline);   // reads until '\n' or EOF
-char *dupString(const char *psSource);  // heap copy of a string
+char *readDynamic(int nFd, int nUntilNewline);
+char *dupString(const char *psSource);
 
 #endif  //CUSTOM_DYNAMIC_H
