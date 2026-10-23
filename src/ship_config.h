@@ -1,14 +1,14 @@
 /***********************************************
  *
- * @File : odysseus_parser.h
+ * @File : ship_config.h
  * @Purpose : Header file for the parser for the Odysseus application
  * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
  * @Date : 3/10/26
  *
  ***********************************************/
 
-#ifndef CODE_ODYSSEUS_PARSER_H
-#define CODE_ODYSSEUS_PARSER_H
+#ifndef CODE_SHIP_CONFIG_H
+#define CODE_SHIP_CONFIG_H
 
 // System Includes
 #include <stdio.h>
@@ -45,4 +45,4 @@ typedef struct {
 tOdysseus parseOdysseus(char *psConfigPath);
 void freeOdysseus(tOdysseus *pstOd);
 
-#endif //CODE_ODYSSEUS_PARSER_H
+#endif
