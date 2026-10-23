@@ -35,7 +35,7 @@ island: build/island.o build/port_config.o src/SPHRAGIS\ Library-20260917/sphrag
 	gcc build/island.o build/port_config.o src/SPHRAGIS\ Library-20260917/sphragis.o build/custom_dynamic.o -g -o build/island -lpthread
 
 ithaca: build/ithaca.o build/voyage_config.o build/custom_dynamic.o
-	gcc build/ithaca.o build/ship_config.o build/custom_dynamic.o -g -o build/ithaca -lpthread
+	gcc build/ithaca.o build/voyage_config.o build/custom_dynamic.o -g -o build/ithaca -lpthread
 
 all: odysseus island ithaca
 

@@ -61,8 +61,10 @@ int main(int argc, char *argv[]) {
 
     stOdysseus = parseOdysseus(argv[1]);
 
-
-    while (!gnStop && (psLine = readDynamic(STDIN_FILENO, 1)) != NULL) {
+    while (!gnStop) {
+        write(STDOUT_FILENO, "$ ", 2);
+        psLine = readDynamic(STDIN_FILENO, 1);
+        if (psLine == NULL) break;
         nTokenCount = tokenizeLine(psLine, apsTokens, MAX_ARGS);
         processLine(apsTokens, nTokenCount);
         free(psLine);
