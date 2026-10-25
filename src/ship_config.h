@@ -29,18 +29,27 @@ typedef struct {
 typedef struct {
     char *psName;
     char *psFilePath;
-
+    
     char *psIthacaIp;
     int nIthacaPort;
-
+    
     char *psIslandName;
     char *psIslandIp;
     int nIslandPort;
-
+    
     int nInitialMoney;
     int nNumFoodItems;
     tFood *pstFoodSupplies;
 } tOdysseus;
+
+//TODO: decide if actually needed, or just use tOdysseus directly
+typedef struct {
+    tOdysseus stConfig;
+    int nMoney;
+    int nIthacaFd;
+    int nIslandFd;
+    char *psLocation;
+} tShip;
 
 tOdysseus parseOdysseus(char *psConfigPath);
 void freeOdysseus(tOdysseus *pstOd);

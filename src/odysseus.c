@@ -50,7 +50,8 @@ int main(int argc, char *argv[]) {
     int nTokenCount = 0;
     char *psLine = NULL;
     char *apsTokens[MAX_ARGS];
-    tOdysseus stOdysseus;
+    //tOdysseus stOdysseus;
+    tShip stShip;
     
     if (argc != 2) {
         write(STDOUT_FILENO,"Usage: ./odysseus <config.dat>\n", strlen("Usage: ./odysseus <config.dat>\n"));
@@ -59,19 +60,19 @@ int main(int argc, char *argv[]) {
 
     signal(SIGINT, handleExit);
 
-    stOdysseus = parseOdysseus(argv[1]);
+    stShip.stConfig = parseOdysseus(argv[1]);
 
     while (!gnStop) {
         write(STDOUT_FILENO, "$ ", 2);
         psLine = readDynamic(STDIN_FILENO, 1);
         if (psLine == NULL) break;
         nTokenCount = tokenizeLine(psLine, apsTokens, MAX_ARGS);
-        processLine(apsTokens, nTokenCount);
+        processLine(&stShip, apsTokens, nTokenCount);
         free(psLine);
     }
 
     write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", 29);
-    freeOdysseus(&stOdysseus);
+    freeOdysseus(&stShip.stConfig);
 
     if (gnStop) {
         signal(SIGINT, SIG_DFL);

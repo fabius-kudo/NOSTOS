@@ -8,6 +8,9 @@
  ***********************************************/
 
 #include "commands.h"
+#include "ship_config.h"
+#include "protocol.h"
+#include "socket_utils.h"
 
 /***********************************************
  *
@@ -24,8 +27,40 @@ static int cmd_def(int argc, char *argv[]){
     return 0;
 }
 
+static int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
+    (void) pstShip;
+    (void) argc;
+    (void) argv;
+
+    if (pstShip->nIthacaFd != -1) {
+        write(STDOUT_FILENO, "Already connected to Ithaca\n", strlen("Already connected to Ithaca\n"));
+        return 0;
+    }
+
+    int nFd = connectToServer(pstShip->stConfig.psIthacaIp, pstShip->stConfig.nIthacaPort);
+    if (nFd < 0) {
+        write(STDOUT_FILENO, "Error: cannot reach Ithaca.\n", 28);
+        return -1;
+    }
+
+    // 0x01 request carrying the Odysseus name
+    sendFrame(nFd, 0x01, 0x00, pstShip->stConfig.psName, strlen(pstShip->stConfig.psName));
+
+    tFrame stReply;
+    if (recvFrame(nFd, &stReply) <= 0 || stReply.ucFlags != 0x80) {
+        write(STDOUT_FILENO, "Error: Ithaca refused the connection.\n", 38);
+        close(nFd);
+        return -1;
+    }
+
+    pstShip->nIthacaFd = nFd;
+    strcpy(pstShip->psLocation, "Ithaca");
+    write(STDOUT_FILENO, "Connected to Ithaca...\n", strlen("Connected to Ithaca...\n"));
+    return 0;
+}
+
 static tCommand g_astCommands[] = {
-    { "CONNECT", "ITHACA", 0, { 0 }, "Usage: CONNECT ITHACA\n", cmd_def },
+    { "CONNECT", "ITHACA", 0, { 0 }, "Usage: CONNECT ITHACA\n", cmdConnectIthaca },
     { "LIST", "VOYAGES", 0, { 0 }, "Usage: LIST VOYAGES\n", cmd_def },
     { "ACCEPT", NULL, 1, { ARG_NUMERIC }, "Usage: ACCEPT <voyage_id>\n", cmd_def },
     { "SAIL", NULL, 1, { ARG_TEXT }, "Usage: SAIL <island>\n", cmd_def },
@@ -122,7 +157,7 @@ static tCommand *findCommand(char *ppsTokens[], int nTokenCount, int *pnNameWord
  * @Ret: None.
  *
  ***********************************************/
-void processLine(char *ppsTokens[], int nTokenCount) {
+void processLine(tShip *pstShip, char *ppsTokens[], int nTokenCount) {
     int nNameWords = 0;
     int nGivenArgs = 0;
     int i = 0;
@@ -155,6 +190,5 @@ void processLine(char *ppsTokens[], int nTokenCount) {
         }
     }
 
-    pstCmd->fHandler(nGivenArgs, ppsArgs);
-    write(STDOUT_FILENO, "Command OK\n", strlen("Command OK\n"));
+    pstCmd->fHandler(pstShip, nGivenArgs, ppsArgs);
 }
