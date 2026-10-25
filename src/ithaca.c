@@ -1,13 +1,14 @@
 /***********************************************
  *
- * @File : odysseus_main.c
- * @Purpose : Main function for the Odysseus application
+ * @File : ithaca.c
+ * @Purpose : Main function for the Ithaca application
  * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
  * @Date : 3/10/26
  *
  ***********************************************/
 
 // System Includes
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,9 +17,7 @@
 #include <signal.h>
 
 // Project Includes
-#include "custom_dynamic.h"
-#include "odysseus_command.h"
-#include "odysseus_parser.h"
+#include "voyage_config.h"
 
 static volatile int gnStop = 0;
 
@@ -32,48 +31,52 @@ static volatile int gnStop = 0;
  ***********************************************/
 void handleExit(int nSig) {
     (void)nSig;
-    // Stops extra reads from stdin
-    close(STDIN_FILENO);
     gnStop = 1;
 }
 
 /***********************************************
  *
  * @Name: main
- * @Def: Main entry point for the Odysseus application.
+ * @Def: Main entry point for the Ithaca application.
  * @Arg: In: argc number of command line arguments
  *       In: argv array of command line argument strings
  * @Ret: Returns 0 on success, or non-zero status code on error.
  *
  ***********************************************/
 int main(int argc, char *argv[]) {
-    int nTokenCount = 0;
-    char *psLine = NULL;
-    char *apsTokens[MAX_ARGS];
-    tOdysseus stOdysseus;
-    
-    if (argc != 2) {
-        write(STDOUT_FILENO,"Usage: ./odysseus <config.dat>\n", strlen("Usage: ./odysseus <config.dat>\n"));
+    int nNumVoyages = 0;
+    int nLen = 0;
+    char *psBuf = NULL;
+    tIthaca stIthaca;
+    tVoyage *pstVoyages = NULL;
+
+    if (argc != 3) {
+        write(STDERR_FILENO, "Usage: ./ithaca <config.dat> <voyages.dat>\n", strlen("Usage: ./ithaca <config.dat> <voyages.dat>\n"));
         exit(EXIT_FAILURE);
     }
 
     signal(SIGINT, handleExit);
 
-    stOdysseus = parseOdysseus(argv[1]);
+    stIthaca = parseIthaca(argv[1]);
+    pstVoyages = parseVoyages(argv[2], &nNumVoyages);
 
-
-    while (!gnStop && (psLine = readDynamic(STDIN_FILENO, 1)) != NULL) {
-        nTokenCount = tokenizeLine(psLine, apsTokens, MAX_ARGS);
-        processLine(apsTokens, nTokenCount);
-        free(psLine);
+    nLen = asprintf(&psBuf, "Ithaca initialized. %d voyages loaded.\nWaiting for Odysseus...\n", nNumVoyages);
+    if (nLen < 0) {
+        write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
+        exit(EXIT_FAILURE);
+    } else {
+        write(STDOUT_FILENO, psBuf, nLen);
+        free(psBuf);
     }
 
-    write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", 29);
-    freeOdysseus(&stOdysseus);
-
-    if (gnStop) {
-        signal(SIGINT, SIG_DFL);
-        raise(SIGINT);
+    while (!gnStop) {
+        pause();
     }
+    
+    write(STDOUT_FILENO, "\nIthaca closes the harbor.\n", strlen("\nIthaca closes the harbor.\n"));
+
+    freeIthaca(&stIthaca);
+    freeVoyages(pstVoyages, nNumVoyages);
+
     return 0;
 }

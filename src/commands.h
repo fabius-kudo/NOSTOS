@@ -1,14 +1,14 @@
 /***********************************************
  *
- * @File : odysseus_command.h
+ * @File : commands.h
  * @Purpose : Header file for command handling in the Odysseus application
  * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
  * @Date : 3/10/26
  *
  ***********************************************/
 
-#ifndef CODE_ODYSSEUS_COMMAND_H
-#define CODE_ODYSSEUS_COMMAND_H
+#ifndef CODE_COMMANDS_H
+#define CODE_COMMANDS_H
 
 // System Includes
 #include <stdio.h>
@@ -41,4 +41,4 @@ typedef struct {
 void processLine(char *ppsTokens[], int nTokenCount);
 int tokenizeLine(char *psLine, char *ppsArgv[], int nMaxTokens);
 
-#endif //CODE_ODYSSEUS_COMMAND_H
+#endif
