@@ -8,9 +8,7 @@
  ***********************************************/
 
 #include "commands.h"
-#include "ship_config.h"
-#include "protocol.h"
-#include "socket_utils.h"
+#include "ship_actions.h"
 
 /***********************************************
  *
@@ -27,41 +25,9 @@ static int cmd_def(int argc, char *argv[]){
     return 0;
 }
 
-static int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
-    (void) pstShip;
-    (void) argc;
-    (void) argv;
-
-    if (pstShip->nIthacaFd != -1) {
-        write(STDOUT_FILENO, "Already connected to Ithaca\n", strlen("Already connected to Ithaca\n"));
-        return 0;
-    }
-
-    int nFd = connectToServer(pstShip->stConfig.psIthacaIp, pstShip->stConfig.nIthacaPort);
-    if (nFd < 0) {
-        write(STDOUT_FILENO, "Error: cannot reach Ithaca.\n", 28);
-        return -1;
-    }
-
-    // 0x01 request carrying the Odysseus name
-    sendFrame(nFd, 0x01, 0x00, pstShip->stConfig.psName, strlen(pstShip->stConfig.psName));
-
-    tFrame stReply;
-    if (recvFrame(nFd, &stReply) <= 0 || stReply.ucFlags != 0x80) {
-        write(STDOUT_FILENO, "Error: Ithaca refused the connection.\n", 38);
-        close(nFd);
-        return -1;
-    }
-
-    pstShip->nIthacaFd = nFd;
-    strcpy(pstShip->psLocation, "Ithaca");
-    write(STDOUT_FILENO, "Connected to Ithaca...\n", strlen("Connected to Ithaca...\n"));
-    return 0;
-}
-
 static tCommand g_astCommands[] = {
     { "CONNECT", "ITHACA", 0, { 0 }, "Usage: CONNECT ITHACA\n", cmdConnectIthaca },
-    { "LIST", "VOYAGES", 0, { 0 }, "Usage: LIST VOYAGES\n", cmd_def },
+    { "LIST", "VOYAGES", 0, { 0 }, "Usage: LIST VOYAGES\n", cmdListVoyages },
     { "ACCEPT", NULL, 1, { ARG_NUMERIC }, "Usage: ACCEPT <voyage_id>\n", cmd_def },
     { "SAIL", NULL, 1, { ARG_TEXT }, "Usage: SAIL <island>\n", cmd_def },
     { "MAP", NULL, 0, { 0 }, "Usage: MAP\n", cmd_def },
