@@ -40,46 +40,118 @@ static int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void) ppsArgv;
 
     tFrame stFrame;
-    int nCount = 0;
+    char sData[FRAME_DATA_SIZE + 1];
+    char sLine[300]; //TODO: make this dynamic
+    int nLen;
 
     if (pstShip->nIthacaFd < 0) {
-        write(STDOUT_FILENO, "Error: cannot reach Ithaca.\n", strlen("Error: cannot reach Ithaca.\n"));
+        write(STDOUT_FILENO, "Error: not connected to Ithaca.\n", 32);
         return -1;
     }
 
     sendFrame(pstShip->nIthacaFd, TYPE_LIST_VOYAGES, FLAG_REQUEST, NULL, 0);
 
-    while (1) {
+    int nIndex = 0;
+    int nTotal = 1;
+    while (nIndex < nTotal) {
         if (recvFrame(pstShip->nIthacaFd, &stFrame) != 1) {
-            write(STDOUT_FILENO, "Error: connection to Ithaca lost.\n", strlen("Error: connection to Ithaca lost.\n"));
+            write(STDOUT_FILENO, "Error: connection to Ithaca lost.\n", 34);
+            closeSocket(&pstShip->nIthacaFd);
+            return -1;
+        }
+        frameDataToString(&stFrame, sData, sizeof(sData));
+
+        if (stFrame.ucFlags != FLAGS_OK) {              // error: data is the reason
+            nLen = snprintf(sLine, sizeof(sLine), "Error: %s\n", sData);
+            write(STDOUT_FILENO, sLine, nLen);
             return -1;
         }
 
-        if (stFrame.ucDataLength == 0) {
-            break;
+        char *psSave = NULL;
+        char *psIndex = strtok_r(sData, "&", &psSave);
+        char *psTotal = strtok_r(NULL, "&", &psSave);
+
+        if (psTotal == NULL) {
+            write(STDOUT_FILENO, "No voyages available.\n", 22);
+            return 0;
+        }
+        char *psId = strtok_r(NULL, "&", &psSave);
+        char *psObject = strtok_r(NULL, "&", &psSave);
+        char *psDest = strtok_r(NULL, "&", &psSave);
+        char *psReward = strtok_r(NULL, "&", &psSave);
+        if (!psId || !psObject || !psDest || !psReward) {
+            write(STDOUT_FILENO, "Error: malformed reply from Ithaca.\n", 36);
+            return -1;
         }
 
-        if (nCount == 0) {
-            write(STDOUT_FILENO, "--- AVAILABLE VOYAGES ---\n", strlen("--- AVAILABLE VOYAGES ---\n"));
+        nIndex = atoi(psIndex);
+        nTotal = atoi(psTotal);
+        if (nIndex == 1) {
+            write(STDOUT_FILENO, "--- AVAILABLE VOYAGES ---\n", 26);
         }
-        write(STDOUT_FILENO, stFrame.aucData, stFrame.ucDataLength);
-        nCount++;
-    }
-
-    if (nCount == 0) {
-        write(STDOUT_FILENO, "No voyages available.\n", strlen("No voyages available.\n"));
+        nLen = snprintf(sLine, sizeof(sLine), "%s. %s -> %s [%s]\n",
+                        psId, psObject, psDest, psReward);
+        write(STDOUT_FILENO, sLine, nLen);
     }
     return 0;
 }
 
 static int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void) nArgc;
-    (void) ppsArgv;
+
+    int nLen;
+    char *sMsg;
+    tFrame stReply;
+    char sData[FRAME_DATA_SIZE + 1];
+    char *psSave = NULL;
+    char *psOk, *psId, *psObject, *psDest, *psReward;
 
     if (pstShip->nIthacaFd < 0) {
         write(STDOUT_FILENO, "Error: cannot reach Ithaca.\n", strlen("Error: cannot reach Ithaca.\n"));
         return -1;
     }
+    if (pstShip->nHasVoyage) {
+        write(STDOUT_FILENO, "Error: you already have an active voyage.\n", 42);
+        return -1;
+    }
 
-    //TODO: implement sending voyage acceptance to Ithaca and handling the response
+    sendFrame(pstShip->nIthacaFd, TYPE_ACCEPT, FLAG_REQUEST, ppsArgv[0], (int)strlen(ppsArgv[0]));
+
+    //Get response from Ithaca
+    if (recvFrame(pstShip->nIthacaFd, &stReply) != 1) {
+        write(STDOUT_FILENO, "Error: connection to Ithaca lost.\n", strlen("Error: connection to Ithaca lost.\n"));
+        return -1;
+    }
+
+    frameDataToString(&stReply, sData, sizeof(sData));
+
+    if (stReply.ucFlags != FLAGS_OK) {
+        nLen = snprintf(sMsg, sizeof(sMsg), "Error: %s\n", sData);   // the reason
+        write(STDOUT_FILENO, sMsg, nLen);
+        return -1;
+    }
+
+    psOk = strtok_r(sData, "&", &psSave);
+    psId = strtok_r(NULL, "&", &psSave);
+    psObject = strtok_r(NULL, "&", &psSave);
+    psDest = strtok_r(NULL, "&", &psSave);
+    psReward = strtok_r(NULL, "&", &psSave);
+    if (!psOk || !psId || !psObject || !psDest || !psReward) {
+        write(STDOUT_FILENO, "Error: malformed reply from Ithaca.\n", 36);
+        return -1;
+    }
+
+    pstShip->stVoyage.nId = atoi(psId);
+    strncpy(pstShip->stVoyage.sObject, psObject, sizeof(pstShip->stVoyage.sObject) - 1);
+    pstShip->stVoyage.sObject[sizeof(pstShip->stVoyage.sObject) - 1] = '\0';
+    strncpy(pstShip->stVoyage.sDestination, psDest, sizeof(pstShip->stVoyage.sDestination) - 1);
+    pstShip->stVoyage.sDestination[sizeof(pstShip->stVoyage.sDestination) - 1] = '\0';
+    pstShip->stVoyage.nReward = atoi(psReward);
+    pstShip->nHasVoyage = 1;
+
+    nLen = snprintf(sMsg, sizeof(sMsg), "Voyage %d accepted.\nDestination: %s.\n",
+                    pstShip->stVoyage.nId, pstShip->stVoyage.sDestination);
+    write(STDOUT_FILENO, sMsg, nLen);
+
+    return 0;
 }

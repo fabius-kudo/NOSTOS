@@ -29,34 +29,39 @@ static int handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
 
 //TODO: make that only still available voyages are listed, not the ones that have been accepted by other clients
 void handleListVoyages(tClientSession *pstSession) {
+    tVoyageStore *pstStore = pstSession->pstStore;
+    tVoyage *pstAvail;
     char sData[FRAME_DATA_SIZE + 1];
+    int nTotal = 0;
     int nLen;
+
+    pstAvail = malloc(sizeof(tVoyage) * (pstStore->nNumVoyages > 0 ? pstStore->nNumVoyages : 1));
+    if (pstAvail == NULL) {
+        sendTextFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_ERR, "INTERNAL_ERROR");
+        return -1;
+    }
     
-    //TODO: maybe we dont need mutex lock, was autocomplete
-    pthread_mutex_lock(&pstSession->pstStore->stMutex);
-
-    for (int i = 0; i < pstSession->pstStore->nNumVoyages; i++) {
-        tVoyage *pstVoyage = &pstSession->pstStore->pstVoyages[i];
-
-        nLen = snprintf(sData, sizeof(sData), "%d. %s -> %s [%d]\n",
-                        pstVoyage->nId,
-                        pstVoyage->psOrigin,
-                        pstVoyage->psDestination,
-                        pstVoyage->nReward);
-
-        if (nLen < 0 || nLen > FRAME_DATA_SIZE) {
-            continue;
-        }
-        if (sendFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_OK, sData, nLen) < 0) {
-            pthread_mutex_unlock(&pstSession->pstStore->stMutex);
-            return;
+    pthread_mutex_lock(&pstStore->stMutex);
+    for (int i = 0; i < pstStore->nNumVoyages; i++) {
+        if (!pstStore->pstVoyages[i].nAssigned) {
+            pstAvail[nTotal++] = pstStore->pstVoyages[i];
         }
     }
+    pthread_mutex_unlock(&pstStore->stMutex);
 
-    // Terminator: a frame with no data
-    sendFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_OK, NULL, 0);
-
-    pthread_mutex_unlock(&pstSession->pstStore->stMutex);
+    if (nTotal == 0) {
+        sendTextFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_OK, "0");
+    }
+    for (int i = 0; i < nTotal; i++) {
+        nLen = snprintf(sData, sizeof(sData), "%d&%d&%d&%s&%s&%d",
+                        i + 1, nTotal, pstAvail[i].nId, pstAvail[i].psOrigin, pstAvail[i].psDestination, pstAvail[i].nReward);
+        if (nLen < 0 || nLen > FRAME_DATA_SIZE ||
+            sendFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_OK, sData, nLen) < 0) {
+            break;
+        }
+    }
+    free(pstAvail);
+    return 0;
 }
 
 void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
@@ -67,6 +72,8 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     //If valid, mark the voyage as accepted and send a success response
 
     //If not valid, send an error response
+
+    //TODO: decide how a voyage is marked as busy. when is it freed?
 
 }
 

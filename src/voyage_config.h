@@ -34,6 +34,7 @@ typedef struct {
     char *psFile;
     char *psDestination;
     int nReward;
+    int nAssigned;
 } tVoyage;
 
 tIthaca parseIthaca(char *config_path);

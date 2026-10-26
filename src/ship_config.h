@@ -43,11 +43,20 @@ typedef struct {
 } tOdysseus;
 
 typedef struct {
+    int nId;
+    char sObject[100];
+    char sDestination[100];
+    int nReward;
+} tActiveVoyage;
+
+typedef struct {
     tOdysseus stConfig;
     int nMoney;
     int nIthacaFd;
     int nIslandFd;
     char *psLocation;
+    int nHasVoyage;
+    tActiveVoyage stVoyage;
 } tShip;
 
 tOdysseus parseOdysseus(char *psConfigPath);
