@@ -42,7 +42,6 @@ typedef struct {
     tFood *pstFoodSupplies;
 } tOdysseus;
 
-//TODO: decide if actually needed, or just use tOdysseus directly
 typedef struct {
     tOdysseus stConfig;
     int nMoney;

@@ -29,7 +29,8 @@ typedef struct {
 } tIthaca;
 
 typedef struct {
-    char *psObject;
+    int nId;
+    char *psOrigin;
     char *psFile;
     char *psDestination;
     int nReward;

@@ -4,9 +4,10 @@
 #include "socket_utils.h"
 
 static int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
-    (void) pstShip;
     (void) argc;
     (void) argv;
+
+    tFrame stReply;
 
     if (pstShip->nIthacaFd != -1) {
         write(STDOUT_FILENO, "Already connected to Ithaca\n", strlen("Already connected to Ithaca\n"));
@@ -20,11 +21,9 @@ static int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
     }
 
     // 0x01 request carrying the Odysseus name
-    sendFrame(nFd, 0x01, 0x00, pstShip->stConfig.psName, strlen(pstShip->stConfig.psName));
+    sendFrame(nFd, TYPE_CONNECT_ITHACA, FLAG_REQUEST, pstShip->stConfig.psName, strlen(pstShip->stConfig.psName));
 
-    //TODO: make ithaca respond
-    tFrame stReply;
-    if (recvFrame(nFd, &stReply) <= 0 || stReply.ucFlags != 0x80) {
+    if (recvFrame(nFd, &stReply) != 1 || stReply.ucFlags != FLAGS_OK) {
         write(STDOUT_FILENO, "Error: Ithaca refused the connection.\n", strlen("Error: Ithaca refused the connection.\n"));
         close(nFd);
         return -1;
@@ -32,20 +31,55 @@ static int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
 
     pstShip->nIthacaFd = nFd;
     strcpy(pstShip->psLocation, "Ithaca");
-    write(STDOUT_FILENO, "Connected to Ithaca...\n", strlen("Connected to Ithaca...\n"));
+    write(STDOUT_FILENO, "Connected to Ithaca.\n", strlen("Connected to Ithaca.\n"));
     return 0;
 }
 
-static int cmdListVoyages(tShip *pContext, int nArgc, char *ppsArgv[]) {
+static int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void) nArgc;
+    (void) ppsArgv;
+
     tFrame stFrame;
+    int nCount = 0;
 
-    if (pContext->nIthacaFd < 0) { /* print error, return -1 */ }
+    if (pstShip->nIthacaFd < 0) {
+        write(STDOUT_FILENO, "Error: cannot reach Ithaca.\n", strlen("Error: cannot reach Ithaca.\n"));
+        return -1;
+    }
 
-    sendFrame(pContext->nIthacaFd, TYPE_LIST_VOYAGES, FLAG_REQUEST, NULL, 0);
+    sendFrame(pstShip->nIthacaFd, TYPE_LIST_VOYAGES, FLAG_REQUEST, NULL, 0);
 
-    do {
-        if (recvFrame(pContext->nIthacaFd, &stFrame) != 1) { /* connection lost */ }
-        // parse Index&Total&ID&Object&Destination&Reward and print it
-    } while (/* index < total */);
+    while (1) {
+        if (recvFrame(pstShip->nIthacaFd, &stFrame) != 1) {
+            write(STDOUT_FILENO, "Error: connection to Ithaca lost.\n", strlen("Error: connection to Ithaca lost.\n"));
+            return -1;
+        }
+
+        if (stFrame.ucDataLength == 0) {
+            break;
+        }
+
+        if (nCount == 0) {
+            write(STDOUT_FILENO, "--- AVAILABLE VOYAGES ---\n", strlen("--- AVAILABLE VOYAGES ---\n"));
+        }
+        write(STDOUT_FILENO, stFrame.aucData, stFrame.ucDataLength);
+        nCount++;
+    }
+
+    if (nCount == 0) {
+        write(STDOUT_FILENO, "No voyages available.\n", strlen("No voyages available.\n"));
+    }
     return 0;
+}
+
+static int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void) nArgc;
+    (void) ppsArgv;
+
+    if (pstShip->nIthacaFd < 0) {
+        write(STDOUT_FILENO, "Error: cannot reach Ithaca.\n", strlen("Error: cannot reach Ithaca.\n"));
+        return -1;
+    }
+
+    //TODO: implement sending voyage acceptance to Ithaca and handling the response
 }

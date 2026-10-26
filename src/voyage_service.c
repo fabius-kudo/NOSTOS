@@ -27,6 +27,49 @@ static int handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     return 0;
 }
 
+//TODO: make that only still available voyages are listed, not the ones that have been accepted by other clients
+void handleListVoyages(tClientSession *pstSession) {
+    char sData[FRAME_DATA_SIZE + 1];
+    int nLen;
+    
+    //TODO: maybe we dont need mutex lock, was autocomplete
+    pthread_mutex_lock(&pstSession->pstStore->stMutex);
+
+    for (int i = 0; i < pstSession->pstStore->nNumVoyages; i++) {
+        tVoyage *pstVoyage = &pstSession->pstStore->pstVoyages[i];
+
+        nLen = snprintf(sData, sizeof(sData), "%d. %s -> %s [%d]\n",
+                        pstVoyage->nId,
+                        pstVoyage->psOrigin,
+                        pstVoyage->psDestination,
+                        pstVoyage->nReward);
+
+        if (nLen < 0 || nLen > FRAME_DATA_SIZE) {
+            continue;
+        }
+        if (sendFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_OK, sData, nLen) < 0) {
+            pthread_mutex_unlock(&pstSession->pstStore->stMutex);
+            return;
+        }
+    }
+
+    // Terminator: a frame with no data
+    sendFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_OK, NULL, 0);
+
+    pthread_mutex_unlock(&pstSession->pstStore->stMutex);
+}
+
+void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
+    //Get the voyage ID from the frame data
+
+    //Check if the voyage ID is valid and available
+
+    //If valid, mark the voyage as accepted and send a success response
+
+    //If not valid, send an error response
+
+}
+
 void serveClient(tClientSession *pstSession) {
     tFrame stFrame;
     int nKeepGoing = 1;

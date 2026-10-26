@@ -5,6 +5,8 @@
  * @Def: Serializes a frame into a 256-byte buffer, zero-padded.
  * @Ret: 0 on success, -1 if the data does not fit.
  ***********************************************/
+
+//TODO: check how frames are built in given examples
 int buildFrame(unsigned char *pucBuf, unsigned char ucType, unsigned char ucFlags, const void *pData, int nLen) {
     if (nLen < 0 || nLen > FRAME_DATA_SIZE) {
         return -1;
@@ -65,6 +67,7 @@ int sendTextFrame(int nFd, unsigned char ucType, unsigned char ucFlags, const ch
  *       (errno == EINTR if interrupted by a signal such as CTRL+C).
  ***********************************************/
 int recvFrame(int nFd, tFrame *pstFrame) {
+    //TODO: idk why we need the buffer
     unsigned char aucBuf[FRAME_SIZE];
     int nTotal = 0;
     ssize_t nRead;
