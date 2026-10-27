@@ -5,6 +5,7 @@
  * @Def: Creates a TCP socket bound to the given IP and port, ready to accept.
  * @Ret: Listening fd, or -1 on error.
  ***********************************************/
+//TODO: idk if we need this
 int createServerSocket(const char *psIp, int nPort) {
     struct sockaddr_in stAddr;
     int nOpt = 1;

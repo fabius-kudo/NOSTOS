@@ -142,16 +142,20 @@ static int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
 
     pstShip->stVoyage.nId = atoi(psId);
-    strncpy(pstShip->stVoyage.sObject, psObject, sizeof(pstShip->stVoyage.sObject) - 1);
-    pstShip->stVoyage.sObject[sizeof(pstShip->stVoyage.sObject) - 1] = '\0';
+    strncpy(pstShip->stVoyage.sOrigin, psObject, sizeof(pstShip->stVoyage.sOrigin) - 1);
+    pstShip->stVoyage.sOrigin[sizeof(pstShip->stVoyage.sOrigin) - 1] = '\0';
     strncpy(pstShip->stVoyage.sDestination, psDest, sizeof(pstShip->stVoyage.sDestination) - 1);
     pstShip->stVoyage.sDestination[sizeof(pstShip->stVoyage.sDestination) - 1] = '\0';
     pstShip->stVoyage.nReward = atoi(psReward);
     pstShip->nHasVoyage = 1;
 
-    nLen = snprintf(sMsg, sizeof(sMsg), "Voyage %d accepted.\nDestination: %s.\n",
-                    pstShip->stVoyage.nId, pstShip->stVoyage.sDestination);
+    nLen = snprintf(sMsg, sizeof(sMsg), "Voyage %d accepted.\nDestination: %s.\n", pstShip->stVoyage.nId, pstShip->stVoyage.sDestination);
     write(STDOUT_FILENO, sMsg, nLen);
 
     return 0;
+}
+
+static int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+
+    
 }

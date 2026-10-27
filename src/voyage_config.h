@@ -20,6 +20,13 @@
 // Project Includes
 #include "custom_dynamic.h"
 
+typedef enum {
+    VOYAGE_AVAILABLE,
+    VOYAGE_ASSIGNED,
+    VOYAGE_COMPLETED,
+    VOYAGE_FAILED
+} tVoyageState;
+
 // Custom Type Definitions
 typedef struct {
     char *psServerName;
@@ -34,7 +41,8 @@ typedef struct {
     char *psFile;
     char *psDestination;
     int nReward;
-    int nAssigned;
+    tVoyageState eState;
+    char *sOwner;
 } tVoyage;
 
 tIthaca parseIthaca(char *config_path);

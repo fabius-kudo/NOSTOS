@@ -27,7 +27,6 @@ static int handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     return 0;
 }
 
-//TODO: make that only still available voyages are listed, not the ones that have been accepted by other clients
 void handleListVoyages(tClientSession *pstSession) {
     tVoyageStore *pstStore = pstSession->pstStore;
     tVoyage *pstAvail;
@@ -43,7 +42,7 @@ void handleListVoyages(tClientSession *pstSession) {
     
     pthread_mutex_lock(&pstStore->stMutex);
     for (int i = 0; i < pstStore->nNumVoyages; i++) {
-        if (!pstStore->pstVoyages[i].nAssigned) {
+        if (pstStore->pstVoyages[i].eState == VOYAGE_AVAILABLE) {
             pstAvail[nTotal++] = pstStore->pstVoyages[i];
         }
     }
@@ -65,16 +64,76 @@ void handleListVoyages(tClientSession *pstSession) {
 }
 
 void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
+    tVoyageStore *pstStore = pstSession->pstStore;
+    char sData[FRAME_DATA_SIZE + 1];
+    char sReply[FRAME_DATA_SIZE + 1];
+    const char *psError = NULL;
+    tVoyage *pstVoyage = NULL;
+    int nId, nLen = 0;
+    char *psEnd = NULL;
+
     //Get the voyage ID from the frame data
+    frameDataToString(pstFrame, sData, sizeof(sData));
+    nId = (int)strtol(sData, &psEnd, 10);
+    if (sData[0] == '\0' || *psEnd != '\0' || nId <= 0) {
+        sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "INVALID_ID");
+        return;
+    }
 
     //Check if the voyage ID is valid and available
+    pthread_mutex_lock(&pstStore->stMutex);
 
-    //If valid, mark the voyage as accepted and send a success response
+    for (int i = 0; i < pstStore->nNumVoyages; i++) {
+        tVoyage *pstV = &pstStore->pstVoyages[i];
+
+        if (pstV->eState == VOYAGE_ASSIGNED && strcmp(pstV->sOwner, pstSession->sName) == 0) {
+            psError = "ALREADY_HAVE_VOYAGE";     // this ship still holds one
+            break;
+        }
+        if (pstV->nId == nId) {
+            pstVoyage = pstV;
+            //TODO: idk if we can stop loop here
+        }
+    }
+
+    if (psError == NULL) {
+        if (pstVoyage == NULL) {
+            psError = "VOYAGE_NOT_FOUND";
+        } else if (pstVoyage->eState != VOYAGE_AVAILABLE) {
+            psError = "VOYAGE_NOT_AVAILABLE";
+        } else {
+            pstVoyage->eState = VOYAGE_ASSIGNED;
+            strncpy(pstVoyage->sOwner, pstSession->sName, sizeof(pstVoyage->sOwner) - 1);
+            pstVoyage->sOwner[sizeof(pstVoyage->sOwner) - 1] = '\0';
+
+            // Build the reply while the data is protected
+            nLen = snprintf(sReply, sizeof(sReply), "OK&%d&%s&%s&%d", 
+                    pstVoyage->nId, pstVoyage->psOrigin, pstVoyage->psDestination, pstVoyage->nReward);
+        }
+    }
+
+    pthread_mutex_unlock(&pstStore->stMutex);
 
     //If not valid, send an error response
+    if (psError != NULL) {
+        sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, psError);
+        return;
+    }    
+    
+    //If valid, mark the voyage as accepted and send a success response
 
-    //TODO: decide how a voyage is marked as busy. when is it freed?
+    //TODO: idk if we need this check, but just in case
+    if (nLen < 0 || nLen > FRAME_DATA_SIZE) {
+        // Reply doesn't fit in a frame: undo the assignment
+        pthread_mutex_lock(&pstStore->stMutex);
+        pstVoyage->eState = VOYAGE_AVAILABLE;
+        pstVoyage->sOwner[0] = '\0';
+        pthread_mutex_unlock(&pstStore->stMutex);
+        sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "INTERNAL_ERROR");
+        return;
+    }
 
+    sendFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_OK, sReply, nLen);
 }
 
 void serveClient(tClientSession *pstSession) {
