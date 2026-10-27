@@ -8,6 +8,7 @@
  ***********************************************/
 
 #include "commands.h"
+#include "ship_actions.h"
 
 /***********************************************
  *
@@ -25,10 +26,10 @@ static int cmd_def(int argc, char *argv[]){
 }
 
 static tCommand g_astCommands[] = {
-    { "CONNECT", "ITHACA", 0, { 0 }, "Usage: CONNECT ITHACA\n", cmd_def },
-    { "LIST", "VOYAGES", 0, { 0 }, "Usage: LIST VOYAGES\n", cmd_def },
-    { "ACCEPT", NULL, 1, { ARG_NUMERIC }, "Usage: ACCEPT <voyage_id>\n", cmd_def },
-    { "SAIL", NULL, 1, { ARG_TEXT }, "Usage: SAIL <island>\n", cmd_def },
+    { "CONNECT", "ITHACA", 0, { 0 }, "Usage: CONNECT ITHACA\n", cmdConnectIthaca },
+    { "LIST", "VOYAGES", 0, { 0 }, "Usage: LIST VOYAGES\n", cmdListVoyages },
+    { "ACCEPT", NULL, 1, { ARG_NUMERIC }, "Usage: ACCEPT <voyage_id>\n", cmdAcceptVoyage },
+    { "SAIL", NULL, 1, { ARG_TEXT }, "Usage: SAIL <island>\n", cmdSail },
     { "MAP", NULL, 0, { 0 }, "Usage: MAP\n", cmd_def },
     { "LIST", "MARKET", 0, { 0 }, "Usage: LIST MARKET\n", cmd_def },
     { "BUY", NULL, 2, { ARG_TEXT, ARG_NUMERIC }, "Usage: BUY <product> <amount>\n", cmd_def },
@@ -122,7 +123,7 @@ static tCommand *findCommand(char *ppsTokens[], int nTokenCount, int *pnNameWord
  * @Ret: None.
  *
  ***********************************************/
-void processLine(char *ppsTokens[], int nTokenCount) {
+void processLine(tShip *pstShip, char *ppsTokens[], int nTokenCount) {
     int nNameWords = 0;
     int nGivenArgs = 0;
     int i = 0;
@@ -155,6 +156,5 @@ void processLine(char *ppsTokens[], int nTokenCount) {
         }
     }
 
-    pstCmd->fHandler(nGivenArgs, ppsArgs);
-    write(STDOUT_FILENO, "Command OK\n", strlen("Command OK\n"));
+    pstCmd->fHandler(pstShip, nGivenArgs, ppsArgs);
 }

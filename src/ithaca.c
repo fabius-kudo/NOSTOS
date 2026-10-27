@@ -18,6 +18,7 @@
 
 // Project Includes
 #include "voyage_config.h"
+#include "voyage_service.h"
 
 static volatile int gnStop = 0;
 
@@ -32,6 +33,15 @@ static volatile int gnStop = 0;
 void handleExit(int nSig) {
     (void)nSig;
     gnStop = 1;
+}
+
+static void *clientThread(void *pArg) {
+    tClientSession *pstSession = (tClientSession *)pArg;
+
+    serveClient(pstSession);
+    closeSocket(&pstSession->nFd);
+    free(pstSession);
+    return NULL;
 }
 
 /***********************************************
@@ -70,6 +80,8 @@ int main(int argc, char *argv[]) {
     }
 
     while (!gnStop) {
+        //TODO: accept connections from Odysseus and handle voyage requests
+        
         pause();
     }
     

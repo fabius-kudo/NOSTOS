@@ -21,7 +21,7 @@
 #define MAX_ARGS 4
 
 // Custom Type Definitions
-typedef int (*tCommandHandler)(int nArgc, char *ppsArgv[]);
+typedef int (*tCommandHandler)(void *context, int nArgc, char *ppsArgv[]);
 
 typedef enum {
     ARG_NONE,
@@ -38,7 +38,7 @@ typedef struct {
     tCommandHandler fHandler;
 } tCommand;
 
-void processLine(char *ppsTokens[], int nTokenCount);
+void processLine(tShip *pstShip, char *ppsTokens[], int nTokenCount);
 int tokenizeLine(char *psLine, char *ppsArgv[], int nMaxTokens);
 
 #endif

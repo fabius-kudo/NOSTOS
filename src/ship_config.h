@@ -29,18 +29,35 @@ typedef struct {
 typedef struct {
     char *psName;
     char *psFilePath;
-
+    
     char *psIthacaIp;
     int nIthacaPort;
-
+    
     char *psIslandName;
     char *psIslandIp;
     int nIslandPort;
-
+    
     int nInitialMoney;
     int nNumFoodItems;
     tFood *pstFoodSupplies;
 } tOdysseus;
+
+typedef struct {
+    int nId;
+    char sOrigin[100];
+    char sDestination[100];
+    int nReward;
+} tActiveVoyage;
+
+typedef struct {
+    tOdysseus stConfig;
+    int nMoney;
+    int nIthacaFd;
+    int nIslandFd;
+    char *psLocation;
+    int nHasVoyage;
+    tActiveVoyage stVoyage;
+} tShip;
 
 tOdysseus parseOdysseus(char *psConfigPath);
 void freeOdysseus(tOdysseus *pstOd);
