@@ -73,6 +73,10 @@ int main(int argc, char *argv[]) {
     stIthaca = parseIthaca(argv[1]);
     pstVoyages = parseVoyages(argv[2], &nNumVoyages);
 
+    //test
+    nLen = asprintf(&psBuf, "%s %s %s %d\n\n", stIthaca.psServerName, stIthaca.psPath, stIthaca.psIpAddress, stIthaca.nPort);
+    write(STDOUT_FILENO, psBuf, nLen);
+
     // ############# SERVER INIT #########
 
     int nServerFd = createServerSocket(stIthaca.psIpAddress, stIthaca.nPort);
@@ -99,9 +103,9 @@ int main(int argc, char *argv[]) {
     while (!gnStop) {
         int nClientFd = acceptClient(nServerFd);
         if (nClientFd < 0) {
-            // if (errno == EINTR) {
-            //     continue;
-            // }
+            if (errno == EINTR) {
+                continue;
+            }
             break;
         }
 

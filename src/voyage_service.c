@@ -37,7 +37,7 @@ void handleListVoyages(tClientSession *pstSession) {
     pstAvail = malloc(sizeof(tVoyage) * (pstStore->nNumVoyages > 0 ? pstStore->nNumVoyages : 1));
     if (pstAvail == NULL) {
         sendTextFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_ERR, "INTERNAL_ERROR");
-        return -1;
+        //return -1;
     }
     
     pthread_mutex_lock(&pstStore->stMutex);
@@ -60,7 +60,7 @@ void handleListVoyages(tClientSession *pstSession) {
         }
     }
     free(pstAvail);
-    return 0;
+    //return 0;
 }
 
 void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
@@ -168,7 +168,7 @@ void serveClient(tClientSession *pstSession) {
                 handleAccept(pstSession, &stFrame);
                 break;
             case TYPE_DISCONNECT:
-                handleDisconnect(pstSession);
+                //handleDisconnect(pstSession);
                 nKeepGoing = 0;
                 break;
             default:
