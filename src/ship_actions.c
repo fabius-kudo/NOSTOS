@@ -45,7 +45,7 @@ static int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     int nLen;
 
     if (pstShip->nIthacaFd < 0) {
-        write(STDOUT_FILENO, "Error: not connected to Ithaca.\n", 32);
+        write(STDOUT_FILENO, "Error: not connected to Ithaca.\n", strlen("Error: not connected to Ithaca.\n"));
         return -1;
     }
 
@@ -55,7 +55,7 @@ static int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     int nTotal = 1;
     while (nIndex < nTotal) {
         if (recvFrame(pstShip->nIthacaFd, &stFrame) != 1) {
-            write(STDOUT_FILENO, "Error: connection to Ithaca lost.\n", 34);
+            write(STDOUT_FILENO, "Error: connection to Ithaca lost.\n", strlen("Error: connection to Ithaca lost.\n"));
             closeSocket(&pstShip->nIthacaFd);
             return -1;
         }
@@ -67,27 +67,27 @@ static int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
             return -1;
         }
 
-        char *psSave = NULL;
-        char *psIndex = strtok_r(sData, "&", &psSave);
-        char *psTotal = strtok_r(NULL, "&", &psSave);
+        char *psIndex  = strtok(sData, "&");
+        char *psTotal  = strtok(NULL, "&");
 
         if (psTotal == NULL) {
-            write(STDOUT_FILENO, "No voyages available.\n", 22);
+            write(STDOUT_FILENO, "No voyages available.\n", strlen("No voyages available.\n"));
             return 0;
         }
-        char *psId = strtok_r(NULL, "&", &psSave);
-        char *psObject = strtok_r(NULL, "&", &psSave);
-        char *psDest = strtok_r(NULL, "&", &psSave);
-        char *psReward = strtok_r(NULL, "&", &psSave);
+        char *psId     = strtok(NULL, "&");
+        char *psObject = strtok(NULL, "&");
+        char *psDest   = strtok(NULL, "&");
+        char *psReward = strtok(NULL, "&");
+
         if (!psId || !psObject || !psDest || !psReward) {
-            write(STDOUT_FILENO, "Error: malformed reply from Ithaca.\n", 36);
+            write(STDOUT_FILENO, "Error: malformed reply from Ithaca.\n", strlen("Error: malformed reply from Ithaca.\n"));
             return -1;
         }
 
         nIndex = atoi(psIndex);
         nTotal = atoi(psTotal);
         if (nIndex == 1) {
-            write(STDOUT_FILENO, "--- AVAILABLE VOYAGES ---\n", 26);
+            write(STDOUT_FILENO, "--- AVAILABLE VOYAGES ---\n", strlen("--- AVAILABLE VOYAGES ---\n"));
         }
         nLen = snprintf(sLine, sizeof(sLine), "%s. %s -> %s [%s]\n",
                         psId, psObject, psDest, psReward);
@@ -107,11 +107,11 @@ static int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     char *psOk, *psId, *psObject, *psDest, *psReward;
 
     if (pstShip->nIthacaFd < 0) {
-        write(STDOUT_FILENO, "Error: cannot reach Ithaca.\n", strlen("Error: cannot reach Ithaca.\n"));
+        write(STDOUT_FILENO, "Error: not connected to Ithaca.\n", strlen("Error: not connected to Ithaca.\n"));
         return -1;
     }
     if (pstShip->nHasVoyage) {
-        write(STDOUT_FILENO, "Error: you already have an active voyage.\n", 42);
+        write(STDOUT_FILENO, "Error: you already have an active voyage.\n", strlen("Error: you already have an active voyage.\n"));
         return -1;
     }
 
@@ -137,7 +137,7 @@ static int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     psDest = strtok_r(NULL, "&", &psSave);
     psReward = strtok_r(NULL, "&", &psSave);
     if (!psOk || !psId || !psObject || !psDest || !psReward) {
-        write(STDOUT_FILENO, "Error: malformed reply from Ithaca.\n", 36);
+        write(STDOUT_FILENO, "Error: malformed reply from Ithaca.\n", strlen("Error: malformed reply from Ithaca.\n"));
         return -1;
     }
 
@@ -157,5 +157,14 @@ static int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
 static int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
-    
+    //Get the destination from the command arguments
+
+    //Check if the destination is valid and reachable from the current location
+
+    //Diconnect from Ithaca/current island
+
+    //Check if the island has space to dock the ship
+
+    //Connect to the destination island
+
 }

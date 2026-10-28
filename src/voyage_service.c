@@ -70,12 +70,11 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     const char *psError = NULL;
     tVoyage *pstVoyage = NULL;
     int nId, nLen = 0;
-    char *psEnd = NULL;
 
     //Get the voyage ID from the frame data
     frameDataToString(pstFrame, sData, sizeof(sData));
-    nId = (int)strtol(sData, &psEnd, 10);
-    if (sData[0] == '\0' || *psEnd != '\0' || nId <= 0) {
+    nId = atoi(sData);
+    if (sData[0] == '\0' || nId <= 0) {
         sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "INVALID_ID");
         return;
     }
