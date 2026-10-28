@@ -2,7 +2,7 @@
 
 static int handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     char sName[FRAME_DATA_SIZE + 1];
-    char sLog[200];
+    char *sLog;
     int nLen;
 
     if (pstFrame->ucDataLength == 0) {
@@ -31,6 +31,7 @@ void handleListVoyages(tClientSession *pstSession) {
     tVoyageStore *pstStore = pstSession->pstStore;
     tVoyage *pstAvail;
     char sData[FRAME_DATA_SIZE + 1];
+    char *sLog;
     int nTotal = 0;
     int nLen;
 
@@ -60,6 +61,9 @@ void handleListVoyages(tClientSession *pstSession) {
         }
     }
     free(pstAvail);
+
+    nLen = snprintf(sLog, sizeof(sLog), ">>> %s requested available voyages.\n", pstSession->sName);
+    write(STDOUT_FILENO, sLog, nLen);
     return 0;
 }
 
@@ -68,6 +72,7 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     char sData[FRAME_DATA_SIZE + 1];
     char sReply[FRAME_DATA_SIZE + 1];
     const char *psError = NULL;
+    char *sLog;
     tVoyage *pstVoyage = NULL;
     int nId, nLen = 0;
 
@@ -133,6 +138,36 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     }
 
     sendFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_OK, sReply, nLen);
+
+    nLen = snprintf(sLog, sizeof(sLog), ">>> Voyage %d assigned to %s.\n", pstVoyage->nId, pstSession->sName);
+    write(STDOUT_FILENO, sLog, nLen);
+}
+
+static int handleDisconnect(tClientSession *pstSession, tFrame *pstFrame) {
+    char sName[FRAME_DATA_SIZE + 1];
+    char *sLog;
+    int nLen;
+
+    if (pstFrame->ucDataLength == 0) {
+        sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_ERR, "EMPTY_NAME");
+        return 0;                   // stay connected, let them retry
+    }
+    if (pstSession->nIdentified) {
+        sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_ERR, "ALREADY_DISCONNECTED");
+        return 0;
+    }
+
+    frameDataToString(pstFrame, sName, sizeof(sName));
+
+    nLen = snprintf(sLog, sizeof(sLog), ">>> %s has left Ithaca. Fair winds!\n", pstSession->sName);
+    write(STDOUT_FILENO, sLog, nLen);
+
+    pstSession->sName[0] = '\0';
+    pstSession->nIdentified = 0;
+
+    sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_OK, "OK");
+
+    return 0;
 }
 
 void serveClient(tClientSession *pstSession) {
@@ -167,7 +202,7 @@ void serveClient(tClientSession *pstSession) {
                 handleAccept(pstSession, &stFrame);
                 break;
             case TYPE_DISCONNECT:
-                handleDisconnect(pstSession);
+                handleDisconnect(pstSession, &stFrame);
                 nKeepGoing = 0;
                 break;
             default:
