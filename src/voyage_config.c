@@ -77,7 +77,7 @@ tVoyage *parseVoyages(char *psVoyagesPath, int *pnNumVoyages) {
     int nCount = 0;
     char *psBuf = NULL;
     char *psBufCopy = NULL;
-    char *psLine = NULL;
+    //char *psLine = NULL;
     char *psTok = NULL;
     tVoyage *pstVoyages = NULL;
 
