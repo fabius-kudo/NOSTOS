@@ -44,10 +44,21 @@ typedef struct {
 
 typedef struct {
     int nId;
-    char sOrigin[100];
-    char sDestination[100];
+    char *sOrigin;
+    char *sDestination;
     int nReward;
 } tActiveVoyage;
+
+typedef struct {
+    char *sName;
+    char *sIp;
+    int nPort;
+} tKnownIsland;
+
+typedef struct {
+    char *sA;
+    char *sB;
+} tKnownRoute;
 
 typedef struct {
     tOdysseus stConfig;
@@ -57,6 +68,11 @@ typedef struct {
     char *psLocation;
     int nHasVoyage;
     tActiveVoyage stVoyage;
+
+    tKnownIsland *pstIslands;   
+    int nNumIslands;   // starts with Aeaea from the config
+    tKnownRoute *pstRoutes;     
+    int nNumRoutes;    // starts empty
 } tShip;
 
 tOdysseus parseOdysseus(char *psConfigPath);

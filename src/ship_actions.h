@@ -3,6 +3,8 @@
 
 #include "ship_config.h"
 
+#define RATION_KG 7
+
 static int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]);
 static int cmdListVoyages(tShip *pContext, int nArgc, char *ppsArgv[]);
 static int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]);
