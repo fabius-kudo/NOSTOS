@@ -33,7 +33,7 @@
 #define FLAG_ERROR    0x40
 #define FLAG_BINARY   0x20
 #define FLAGS_OK      (FLAG_RESPONSE)
-#define FLAGS_ERR     (FLAG_RESPONSE | FLAG_ERROR)
+#define FLAGS_ERR     (FLAG_RESPONSE | FLAG_ERROR) //TODO: what dis mean
 
 typedef struct {
     unsigned char ucType;
