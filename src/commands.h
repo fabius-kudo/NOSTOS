@@ -17,6 +17,8 @@
 #include <strings.h>
 #include <unistd.h>
 
+#include "ship_config.h"
+
 // Constant Declarations
 #define MAX_ARGS 4
 

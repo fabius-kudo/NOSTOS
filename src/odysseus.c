@@ -17,8 +17,9 @@
 
 // Project Includes
 #include "custom_dynamic.h"
-#include "commands.h"
 #include "ship_config.h"
+#include "commands.h"
+
 
 static volatile int gnStop = 0;
 

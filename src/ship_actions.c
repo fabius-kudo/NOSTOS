@@ -3,7 +3,7 @@
 #include "protocol.h"
 #include "socket_utils.h"
 
-static int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
+int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
     (void) argc;
     (void) argv;
 
@@ -35,7 +35,7 @@ static int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
     return 0;
 }
 
-static int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void) nArgc;
     (void) ppsArgv;
 
@@ -96,7 +96,7 @@ static int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     return 0;
 }
 
-static int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void) nArgc;
 
     int nLen;
@@ -250,7 +250,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
     }
 }
 
-static int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
 
     const tKnownIsland *pstDest;
