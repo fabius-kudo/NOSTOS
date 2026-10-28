@@ -19,6 +19,7 @@
 // Project Includes
 #include "voyage_config.h"
 #include "voyage_service.h"
+#include "socket_utils.h"
 
 static volatile int gnStop = 0;
 
