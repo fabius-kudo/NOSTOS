@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <pthread.h>
 
 // Project Includes
 #include "voyage_config.h"
@@ -61,6 +62,7 @@ int main(int argc, char *argv[]) {
     tIthaca stIthaca;
     tVoyage *pstVoyages = NULL;
 
+    // ########## INIT FROM FILE ###########
     if (argc != 3) {
         write(STDERR_FILENO, "Usage: ./ithaca <config.dat> <voyages.dat>\n", strlen("Usage: ./ithaca <config.dat> <voyages.dat>\n"));
         exit(EXIT_FAILURE);
@@ -71,23 +73,57 @@ int main(int argc, char *argv[]) {
     stIthaca = parseIthaca(argv[1]);
     pstVoyages = parseVoyages(argv[2], &nNumVoyages);
 
+    // ############# SERVER INIT #########
+
+    int nServerFd = createServerSocket(stIthaca.psIpAddress, stIthaca.nPort);
+    if (nServerFd < 0) {
+        write(STDERR_FILENO, "Error: Failed to create server socket\n", strlen("Error: Failed to create server socket\n"));
+        freeIthaca(&stIthaca);
+        freeVoyages(pstVoyages, nNumVoyages);
+        exit(EXIT_FAILURE);
+    }
+
     nLen = asprintf(&psBuf, "Ithaca initialized. %d voyages loaded.\nWaiting for Odysseus...\n", nNumVoyages);
     if (nLen < 0) {
         write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
+        closeSocket(&nServerFd);
+        freeIthaca(&stIthaca);
+        freeVoyages(pstVoyages, nNumVoyages);
         exit(EXIT_FAILURE);
     } else {
         write(STDOUT_FILENO, psBuf, nLen);
         free(psBuf);
     }
 
+    //  ######### SERVER LOOP (accept clients) #####
     while (!gnStop) {
-        //TODO: accept connections from Odysseus and handle voyage requests
-        
-        pause();
+        int nClientFd = acceptClient(nServerFd);
+        if (nClientFd < 0) {
+            // if (errno == EINTR) {
+            //     continue;
+            // }
+            break;
+        }
+
+        tClientSession *pstSession = malloc(sizeof(tClientSession));
+        if (!pstSession) {
+            close(nClientFd);
+            continue;
+        }
+        pstSession->nFd = nClientFd;
+
+        pthread_t nThreadId;
+        if (pthread_create(&nThreadId, NULL, clientThread, pstSession) != 0) {
+            close(nClientFd);
+            free(pstSession);
+        } else {
+            pthread_detach(nThreadId);
+        }
     }
     
     write(STDOUT_FILENO, "\nIthaca closes the harbor.\n", strlen("\nIthaca closes the harbor.\n"));
 
+    closeSocket(&nServerFd);
     freeIthaca(&stIthaca);
     freeVoyages(pstVoyages, nNumVoyages);
 
