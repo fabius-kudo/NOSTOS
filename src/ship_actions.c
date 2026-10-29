@@ -315,41 +315,66 @@ static void consumeProvisions(tShip *pstShip, int nKg) {
     }
 }
 
-// Returns 1 when docked, 0 when the ship was lost or the connection died.
-// TODO (step 2): this loop is NOT correct yet. sleep() followed by a blocking
-// recvFrame() can hang forever. It must wait for "a frame OR 5 seconds" without
-// busy waiting (poll with a timeout), and react to Ctrl+C. Only the buffers are fixed here.
+static long nowMs(void) {
+    struct timespec stTs;
+    clock_gettime(CLOCK_MONOTONIC, &stTs);
+    return stTs.tv_sec * 1000L + stTs.tv_nsec / 1000000L;
+}
+
+static long nowMs(void) {
+    struct timespec stTs;
+    clock_gettime(CLOCK_MONOTONIC, &stTs);
+    return stTs.tv_sec * 1000L + stTs.tv_nsec / 1000000L;
+}
+
+
 static int waitForDocking(tShip *pstShip, const char *psIsland) {
+    struct pollfd astFds[1];
     tFrame stFrame;
     char sData[FRAME_DATA_SIZE + 1];
-    char *psMsg = NULL;
+    char *sMsg;
+    int nLen;
 
+    long nNextRation = nowMs() + RATION_INTERVAL_MS;
+
+    astFds[0].fd = pstShip->nIslandFd;
+    astFds[0].events = POLLIN;
+    
     while (1) {
-        sleep(5);
+        long nRemaining = nNextRation - nowMs();
+        if (nRemaining < 0) {
+            nRemaining = 0;
+        }
 
-        if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
-            say("Error: connection to the island lost.\n");
+        astFds[0].revents = 0;
+        int nRet = poll(astFds, 1, (int)nRemaining);
+
+        if (nRet < 0) {
+            // EINTR = a signal arrived (CTRL+C); anything else is a real error
             closeSocket(&pstShip->nIslandFd);
             return 0;
         }
-        frameDataToString(&stFrame, sData, sizeof(sData));
-        if (stFrame.ucType == TYPE_ISLAND_ARRIVE && stFrame.ucFlags == FLAGS_OK
-            && strcmp(sData, "DOCKED") == 0) {
-            if (asprintf(&psMsg, "\n>>> %s has granted access to the port.\n", psIsland) < 0) {
-                psMsg = NULL;
+
+        if (nRet > 0) {
+            if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
+                write(STDOUT_FILENO, "Error: connection to the island lost.\n", strlen("Error: connection to the island lost.\n"));
+                closeSocket(&pstShip->nIslandFd);
+                return 0;
             }
-            sayAndFree(psMsg);
-            return 1;
+            frameDataToString(&stFrame, sData, sizeof(sData));
+            if (stFrame.ucType == TYPE_ISLAND_ARRIVE && stFrame.ucFlags == FLAGS_OK && strcmp(sData, "DOCKED") == 0) {
+                nLen = snprintf(sMsg, sizeof(sMsg), "\n%s has granted access to the port.\n", psIsland);
+                write(STDOUT_FILENO, sMsg, nLen);
+                return 1;
+            }
+            continue;
         }
-
+            
         consumeProvisions(pstShip, RATION_KG);
+        nNextRation += RATION_INTERVAL_MS;
 
-        psMsg = NULL;
-        if (asprintf(&psMsg, "\n>>> The crew consumes another ration.\nProvisions remaining: %d kg\n",
-                     totalProvisions(pstShip)) < 0) {
-            psMsg = NULL;
-        }
-        sayAndFree(psMsg);
+        nLen = snprintf(sMsg, sizeof(sMsg), "\n>>> The crew consumes another ration.\nProvisions remaining: %d kg\n", totalProvisions(pstShip));
+        write(STDOUT_FILENO, sMsg, nLen);
 
         if (totalProvisions(pstShip) <= 0) {
             psMsg = NULL;
