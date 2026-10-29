@@ -1,5 +1,4 @@
 #define _GNU_SOURCE
-#include <strings.h>
 #include "ship_actions.h"
 
 /* ---------- small output helpers ---------- */
@@ -321,13 +320,6 @@ static long nowMs(void) {
     return stTs.tv_sec * 1000L + stTs.tv_nsec / 1000000L;
 }
 
-static long nowMs(void) {
-    struct timespec stTs;
-    clock_gettime(CLOCK_MONOTONIC, &stTs);
-    return stTs.tv_sec * 1000L + stTs.tv_nsec / 1000000L;
-}
-
-
 static int waitForDocking(tShip *pstShip, const char *psIsland) {
     struct pollfd astFds[1];
     tFrame stFrame;
@@ -363,8 +355,12 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
             }
             frameDataToString(&stFrame, sData, sizeof(sData));
             if (stFrame.ucType == TYPE_ISLAND_ARRIVE && stFrame.ucFlags == FLAGS_OK && strcmp(sData, "DOCKED") == 0) {
-                nLen = snprintf(sMsg, sizeof(sMsg), "\n%s has granted access to the port.\n", psIsland);
-                write(STDOUT_FILENO, sMsg, nLen);
+                nLen = asprintf(&sMsg, "\n%s has granted access to the port.\n", psIsland);
+                if (nLen < 0){
+                    write(STDOUT_FILENO, "asprint error\n", strlen("asprint error\n"));
+                } else {
+                    write(STDOUT_FILENO, sMsg, nLen);
+                }
                 return 1;
             }
             continue;
@@ -373,12 +369,20 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
         consumeProvisions(pstShip, RATION_KG);
         nNextRation += RATION_INTERVAL_MS;
 
-        nLen = snprintf(sMsg, sizeof(sMsg), "\n>>> The crew consumes another ration.\nProvisions remaining: %d kg\n", totalProvisions(pstShip));
-        write(STDOUT_FILENO, sMsg, nLen);
+        nLen = asprintf(&sMsg, "\n>>> The crew consumes another ration.\nProvisions remaining: %d kg\n", totalProvisions(pstShip));
+        if (nLen < 0){
+            write(STDOUT_FILENO, "asprint error\n", strlen("asprint error\n"));
+        } else {
+            write(STDOUT_FILENO, sMsg, nLen);
+        }
 
         if (totalProvisions(pstShip) <= 0) {
-            nLen = snprintf(sMsg, sizeof(sMsg),"\nThe crew has run out of provisions.\nOdysseus %s has been lost at sea.\n", pstShip->stConfig.psName);
-            write(STDOUT_FILENO, sMsg, nLen);
+            nLen = asprintf(&sMsg, "\nThe crew has run out of provisions.\nOdysseus %s has been lost at sea.\n", pstShip->stConfig.psName);
+            if (nLen < 0){
+                write(STDOUT_FILENO, "asprint error\n", strlen("asprint error\n"));
+            } else {
+                write(STDOUT_FILENO, sMsg, nLen);
+            }
             closeSocket(&pstShip->nIslandFd);
             return 0;
         }

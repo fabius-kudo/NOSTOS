@@ -4,6 +4,7 @@
 #include "ship_config.h"
 #include "protocol.h"
 #include "socket_utils.h"
+#include <strings.h>
 #include <poll.h>
 #include <time.h>
 
