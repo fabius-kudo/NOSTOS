@@ -61,6 +61,7 @@ int main(int argc, char *argv[]) {
     signal(SIGINT, handleExit);
 
     //init ship
+
     memset(&stShip, 0, sizeof(stShip)); 
     stShip.nIthacaFd = -1;
     stShip.nIslandFd = -1;
@@ -77,10 +78,13 @@ int main(int argc, char *argv[]) {
         free(psLine);
     }
 
+    
+
     write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", 29);
+
+    releaseShip(&stShip);
     if (stShip.nIthacaFd >= 0) close(stShip.nIthacaFd);
     if (stShip.nIslandFd >= 0) close(stShip.nIslandFd);
-    freeOdysseus(&stShip.stConfig);
     free(stShip.psLocation);
 
     if (gnStop) {
