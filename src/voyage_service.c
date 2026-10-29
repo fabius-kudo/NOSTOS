@@ -75,8 +75,8 @@ static void handleListVoyages(tClientSession *pstSession) {
     }
     for (int i = 0; i < nTotal; i++) {
         nLen = snprintf(sData, sizeof(sData), "%d&%d&%d&%s&%s&%d",
-                        i + 1, nTotal, pstAvail[i].nId, pstAvail[i].psOrigin,
-                        pstAvail[i].psDestination, pstAvail[i].nReward);
+                i + 1, nTotal, pstAvail[i].nId, pstAvail[i].psOrigin,
+                pstAvail[i].psDestination, pstAvail[i].nReward);
         if (nLen < 0 || nLen > FRAME_DATA_SIZE ||
             sendFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_OK, sData, nLen) < 0) {
             break;
@@ -110,7 +110,8 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     for (int i = 0; i < pstStore->nNumVoyages; i++) {
         tVoyage *pstV = &pstStore->pstVoyages[i];
 
-        if (pstV->eState == VOYAGE_ASSIGNED && strcmp(pstV->sOwner, pstSession->sName) == 0) {
+        if (pstV->eState == VOYAGE_ASSIGNED && pstV->sOwner != NULL &&
+            strcmp(pstV->sOwner, pstSession->sName) == 0) {
             psError = "ALREADY_HAVE_VOYAGE";
             break;
         }
@@ -125,20 +126,24 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
         } else if (pstVoyage->eState != VOYAGE_AVAILABLE) {
             psError = "VOYAGE_NOT_AVAILABLE";
         } else {
-            pstVoyage->eState = VOYAGE_ASSIGNED;
-            strncpy(pstVoyage->sOwner, pstSession->sName, sizeof(pstVoyage->sOwner) - 1);
-            pstVoyage->sOwner[sizeof(pstVoyage->sOwner) - 1] = '\0';
-
-            // Build the reply while the data is protected
-            nLen = snprintf(sReply, sizeof(sReply), "OK&%d&%s&%s&%d",
-                            pstVoyage->nId, pstVoyage->psOrigin,
-                            pstVoyage->psDestination, pstVoyage->nReward);
-
-            // Reply doesn't fit in a frame: undo the assignment right away
-            if (nLen < 0 || nLen > FRAME_DATA_SIZE) {
-                pstVoyage->eState = VOYAGE_AVAILABLE;
-                pstVoyage->sOwner[0] = '\0';
+            char *psOwner = dupString(pstSession->sName);
+            if (psOwner == NULL) {
                 psError = "INTERNAL_ERROR";
+            } else {
+                free(pstVoyage->sOwner);
+                pstVoyage->sOwner = psOwner;
+                pstVoyage->eState = VOYAGE_ASSIGNED;
+
+                nLen = snprintf(sReply, sizeof(sReply), "OK&%d&%s&%s&%d",
+                                pstVoyage->nId, pstVoyage->psOrigin,
+                                pstVoyage->psDestination, pstVoyage->nReward);
+
+                if (nLen < 0 || nLen > FRAME_DATA_SIZE) {      // undo
+                    pstVoyage->eState = VOYAGE_AVAILABLE;
+                    free(pstVoyage->sOwner);
+                    pstVoyage->sOwner = NULL;
+                    psError = "INTERNAL_ERROR";
+                }
             }
         }
     }

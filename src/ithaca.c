@@ -16,6 +16,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <pthread.h>
+#include <errno.h>
 
 // Project Includes
 #include "voyage_config.h"
@@ -38,8 +39,12 @@ void handleExit(int nSig) {
 }
 
 static void *clientThread(void *pArg) {
-    tClientSession *pstSession = (tClientSession *)pArg;
+    sigset_t stSet;
+    sigemptyset(&stSet);
+    sigaddset(&stSet, SIGINT);
+    pthread_sigmask(SIG_BLOCK, &stSet, NULL);   // only the main thread handles Ctrl+C
 
+    tClientSession *pstSession = (tClientSession *)pArg;
     serveClient(pstSession);
     closeSocket(&pstSession->nFd);
     free(pstSession);
@@ -68,7 +73,13 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    signal(SIGINT, handleExit);
+    //SIGNAL crtl c
+    struct sigaction stAct;
+    memset(&stAct, 0, sizeof(stAct));
+    stAct.sa_handler = handleExit;
+    sigemptyset(&stAct.sa_mask);
+    stAct.sa_flags = 0;                  // no SA_RESTART: accept() returns -1 with EINTR
+    sigaction(SIGINT, &stAct, NULL);
 
     stIthaca = parseIthaca(argv[1]);
     pstVoyages = parseVoyages(argv[2], &nNumVoyages);
@@ -81,6 +92,7 @@ int main(int argc, char *argv[]) {
     //test TODO: remove
     nLen = asprintf(&psBuf, "%s %s %s %d\n\n", stIthaca.psServerName, stIthaca.psPath, stIthaca.psIpAddress, stIthaca.nPort);
     write(STDOUT_FILENO, psBuf, nLen);
+    free(psBuf);
 
     // ############# SERVER INIT #########
 
@@ -133,7 +145,6 @@ int main(int argc, char *argv[]) {
     
     write(STDOUT_FILENO, "\nIthaca closes the harbor.\n", strlen("\nIthaca closes the harbor.\n"));
 
-    closeSocket(&nServerFd);
     closeSocket(&nServerFd);
     pthread_mutex_destroy(&stStore.stMutex);
     freeIthaca(&stIthaca);
