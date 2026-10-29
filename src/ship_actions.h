@@ -15,4 +15,6 @@ int cmdListVoyages(tShip *pContext, int nArgc, char *ppsArgv[]);
 int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]);
 
+void releaseShip(tShip *pstShip);
+
 #endif

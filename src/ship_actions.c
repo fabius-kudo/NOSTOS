@@ -1,203 +1,265 @@
+#define _GNU_SOURCE
+#include <strings.h>
 #include "ship_actions.h"
 
+/* ---------- small output helpers ---------- */
+
+static void say(const char *psMsg) {
+    write(STDOUT_FILENO, psMsg, strlen(psMsg));
+}
+
+// Writes a heap string to stdout and frees it. Does nothing for NULL.
+static void sayAndFree(char *psMsg) {
+    if (psMsg != NULL) {
+        write(STDOUT_FILENO, psMsg, strlen(psMsg));
+        free(psMsg);
+    }
+}
+
+static void sayError(const char *psReason) {
+    char *psMsg = NULL;
+    if (asprintf(&psMsg, "Error: %s\n", psReason) < 0) {
+        psMsg = NULL;                       // contents are undefined when asprintf fails
+    }
+    sayAndFree(psMsg);
+}
+
+/* ---------- ship state helpers ---------- */
+
+// Replaces the ship's location with a heap copy. Returns 0 on success, -1 on malloc failure.
 static int setLocation(tShip *pstShip, const char *psName) {
     char *psCopy = dupString(psName);
     if (psCopy == NULL) {
         return -1;
     }
-    free(pstShip->psLocation);          // free(NULL) is fine on the first call
+    free(pstShip->psLocation);              // free(NULL) is fine on the first call
     pstShip->psLocation = psCopy;
     return 0;
 }
 
-int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
-    (void) argc;
-    (void) argv;
+// Replaces the active voyage. Returns 0 on success, -1 on malloc failure.
+static int setVoyage(tShip *pstShip, int nId, const char *psOrigin, const char *psDest, int nReward) {
+    char *psObjCopy = dupString(psOrigin);
+    char *psDestCopy = dupString(psDest);
+
+    if (psObjCopy == NULL || psDestCopy == NULL) {
+        free(psObjCopy);
+        free(psDestCopy);
+        return -1;
+    }
+    free(pstShip->stVoyage.psOrigin);
+    free(pstShip->stVoyage.psDestination);
+    pstShip->stVoyage.nId = nId;
+    pstShip->stVoyage.psOrigin = psObjCopy;
+    pstShip->stVoyage.psDestination = psDestCopy;
+    pstShip->stVoyage.nReward = nReward;
+    pstShip->nHasVoyage = 1;
+    return 0;
+}
+
+// Closes the connections and frees everything the ship owns, including its config.
+void releaseShip(tShip *pstShip) {
+    closeSocket(&pstShip->nIthacaFd);
+    closeSocket(&pstShip->nIslandFd);
+
+    free(pstShip->psLocation);
+    free(pstShip->stVoyage.psOrigin);
+    free(pstShip->stVoyage.psDestination);
+
+    for (int i = 0; i < pstShip->nNumIslands; i++) {
+        free(pstShip->pstIslands[i].sName);
+        free(pstShip->pstIslands[i].sIp);
+    }
+    free(pstShip->pstIslands);
+
+    for (int i = 0; i < pstShip->nNumRoutes; i++) {
+        free(pstShip->pstRoutes[i].sA);
+        free(pstShip->pstRoutes[i].sB);
+    }
+    free(pstShip->pstRoutes);
+
+    freeOdysseus(&pstShip->stConfig);
+    memset(pstShip, 0, sizeof(*pstShip));
+    pstShip->nIthacaFd = -1;
+    pstShip->nIslandFd = -1;
+}
+
+/* ---------- commands ---------- */
+
+int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+    (void)ppsArgv;
 
     tFrame stReply;
+    char sData[FRAME_DATA_SIZE + 1];
 
-    if (pstShip->nIthacaFd != -1) {
-        write(STDOUT_FILENO, "Already connected to Ithaca\n", strlen("Already connected to Ithaca\n"));
+    if (pstShip->nIthacaFd >= 0) {
+        say("Already connected to Ithaca\n");
         return 0;
     }
 
     int nFd = connectToServer(pstShip->stConfig.psIthacaIp, pstShip->stConfig.nIthacaPort);
     if (nFd < 0) {
-        write(STDOUT_FILENO, "Error: cannot reach Ithaca.\n", strlen("Error: cannot reach Ithaca.\n"));
+        say("Error: cannot reach Ithaca.\n");
         return -1;
     }
 
-    // 0x01 request carrying the Odysseus name
-    // sendFrame(nFd, TYPE_CONNECT_ITHACA, FLAG_REQUEST, pstShip->stConfig.psName, strlen(pstShip->stConfig.psName));
-
-    // if (recvFrame(nFd, &stReply) != 1 || stReply.ucFlags != FLAGS_OK) {
-    //     write(STDOUT_FILENO, "Error: Ithaca refused the connection.\n", strlen("Error: Ithaca refused the connection.\n"));
-    //     close(nFd);
-    //     return -1;
-    // }
-
-    //TEST TODO REMOVE
-    int nRet = sendFrame(nFd, TYPE_CONNECT_ITHACA, FLAG_REQUEST,
-                        pstShip->stConfig.psName, (int)strlen(pstShip->stConfig.psName));
-    if (nRet != 0) {
-        char sDbg[100];
-        int n = snprintf(sDbg, sizeof(sDbg), "DEBUG: sendFrame returned %d\n", nRet);
-        write(STDOUT_FILENO, sDbg, n);
+    if (sendFrame(nFd, TYPE_CONNECT_ITHACA, FLAG_REQUEST,
+                  pstShip->stConfig.psName, (int)strlen(pstShip->stConfig.psName)) != 0
+        || recvFrame(nFd, &stReply) != 1) {
+        say("Error: connection to Ithaca lost.\n");
         closeSocket(&nFd);
         return -1;
     }
-
-    nRet = recvFrame(nFd, &stReply);
-    if (nRet != 1) {
-        char sDbg[100];
-        int n = snprintf(sDbg, sizeof(sDbg), "DEBUG: recvFrame returned %d\n", nRet);
-        write(STDOUT_FILENO, sDbg, n);
-        closeSocket(&nFd);
-        return -1;
-    }
-
     if (stReply.ucFlags != FLAGS_OK) {
-        char sData[FRAME_DATA_SIZE + 1];
-        char sDbg[400];
         frameDataToString(&stReply, sData, sizeof(sData));
-        int n = snprintf(sDbg, sizeof(sDbg), "DEBUG: flags=0x%02X reason=[%s]\n", stReply.ucFlags, sData);
-        write(STDOUT_FILENO, sDbg, n);
+        sayError(sData);                    // the reason sent by Ithaca
         closeSocket(&nFd);
         return -1;
     }
-    //end test
 
     if (setLocation(pstShip, "Ithaca") < 0) {
-    closeSocket(&nFd);
-    return -1;
+        say("Error: out of memory.\n");
+        closeSocket(&nFd);
+        return -1;
     }
     pstShip->nIthacaFd = nFd;
-    write(STDOUT_FILENO, "Connected to Ithaca.\n", strlen("Connected to Ithaca.\n"));
+    say("Connected to Ithaca.\n");
     return 0;
 }
 
 int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
-    (void) nArgc;
-    (void) ppsArgv;
+    (void)nArgc;
+    (void)ppsArgv;
 
     tFrame stFrame;
     char sData[FRAME_DATA_SIZE + 1];
-    char sLine[300]; //TODO: make this dynamic
-    int nLen;
 
     if (pstShip->nIthacaFd < 0) {
-        write(STDOUT_FILENO, "Error: not connected to Ithaca.\n", strlen("Error: not connected to Ithaca.\n"));
+        say("Error: not connected to Ithaca.\n");
+        return -1;
+    }
+    if (pstShip->nHasVoyage) {
+        say("Error: you already have an active voyage.\n");
         return -1;
     }
 
-    sendFrame(pstShip->nIthacaFd, TYPE_LIST_VOYAGES, FLAG_REQUEST, NULL, 0);
+    if (sendFrame(pstShip->nIthacaFd, TYPE_LIST_VOYAGES, FLAG_REQUEST, NULL, 0) != 0) {
+        say("Error: connection to Ithaca lost.\n");
+        closeSocket(&pstShip->nIthacaFd);
+        return -1;
+    }
 
     int nIndex = 0;
     int nTotal = 1;
     while (nIndex < nTotal) {
         if (recvFrame(pstShip->nIthacaFd, &stFrame) != 1) {
-            write(STDOUT_FILENO, "Error: connection to Ithaca lost.\n", strlen("Error: connection to Ithaca lost.\n"));
+            say("Error: connection to Ithaca lost.\n");
             closeSocket(&pstShip->nIthacaFd);
             return -1;
         }
         frameDataToString(&stFrame, sData, sizeof(sData));
 
         if (stFrame.ucFlags != FLAGS_OK) {              // error: data is the reason
-            nLen = snprintf(sLine, sizeof(sLine), "Error: %s\n", sData);
-            write(STDOUT_FILENO, sLine, nLen);
+            sayError(sData);
             return -1;
         }
 
         char *psIndex = strtok(sData, "&");
         char *psTotal = strtok(NULL, "&");
 
-        if (psTotal == NULL) {
-            write(STDOUT_FILENO, "No voyages available.\n", strlen("No voyages available.\n"));
+        if (psTotal == NULL) {                          // Ithaca sends just "0" when empty
+            say("No voyages available.\n");
             return 0;
         }
         char *psId = strtok(NULL, "&");
-        char *psObject = strtok(NULL, "&");
+        char *psOrigin = strtok(NULL, "&");
         char *psDest = strtok(NULL, "&");
         char *psReward = strtok(NULL, "&");
 
-        if (!psId || !psObject || !psDest || !psReward) {
-            write(STDOUT_FILENO, "Error: malformed reply from Ithaca.\n", strlen("Error: malformed reply from Ithaca.\n"));
+        if (!psIndex || !psId || !psOrigin || !psDest || !psReward) {
+            say("Error: malformed reply from Ithaca.\n");
             return -1;
         }
 
         nIndex = atoi(psIndex);
         nTotal = atoi(psTotal);
-        if (nIndex == 1) {
-            write(STDOUT_FILENO, "--- AVAILABLE VOYAGES ---\n", strlen("--- AVAILABLE VOYAGES ---\n"));
+        if (nIndex <= 0 || nTotal <= 0) {
+            say("Error: malformed reply from Ithaca.\n");
+            return -1;
         }
-        nLen = snprintf(sLine, sizeof(sLine), "%s. %s -> %s [%s]\n",
-                        psId, psObject, psDest, psReward);
-        write(STDOUT_FILENO, sLine, nLen);
+        if (nIndex == 1) {
+            say("--- AVAILABLE VOYAGES ---\n");
+        }
+
+        char *psLine = NULL;
+        if (asprintf(&psLine, "%s. %-20s -> %-10s [%s]\n", psId, psOrigin, psDest, psReward) < 0) {
+            psLine = NULL;
+        }
+        sayAndFree(psLine);
     }
     return 0;
 }
 
 int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
-    (void) nArgc;
+    (void)nArgc;
 
-    int nLen;
-    char *sMsg;
     tFrame stReply;
     char sData[FRAME_DATA_SIZE + 1];
-    char *psOk, *psId, *psOrigin, *psDest, *psReward;
 
     if (pstShip->nIthacaFd < 0) {
-        write(STDOUT_FILENO, "Error: not connected to Ithaca.\n", strlen("Error: not connected to Ithaca.\n"));
+        say("Error: not connected to Ithaca.\n");
         return -1;
     }
     if (pstShip->nHasVoyage) {
-        write(STDOUT_FILENO, "Error: you already have an active voyage.\n", strlen("Error: you already have an active voyage.\n"));
+        say("Error: you already have an active voyage.\n");
         return -1;
     }
 
-    sendFrame(pstShip->nIthacaFd, TYPE_ACCEPT, FLAG_REQUEST, ppsArgv[0], (int)strlen(ppsArgv[0]));
-
-    //Get response from Ithaca
-    if (recvFrame(pstShip->nIthacaFd, &stReply) != 1) {
-        write(STDOUT_FILENO, "Error: connection to Ithaca lost.\n", strlen("Error: connection to Ithaca lost.\n"));
+    if (sendFrame(pstShip->nIthacaFd, TYPE_ACCEPT, FLAG_REQUEST,
+                  ppsArgv[0], (int)strlen(ppsArgv[0])) != 0
+        || recvFrame(pstShip->nIthacaFd, &stReply) != 1) {
+        say("Error: connection to Ithaca lost.\n");
+        closeSocket(&pstShip->nIthacaFd);
         return -1;
     }
-
     frameDataToString(&stReply, sData, sizeof(sData));
 
     if (stReply.ucFlags != FLAGS_OK) {
-        nLen = snprintf(sMsg, sizeof(sMsg), "Error: %s\n", sData);   // the reason
-        write(STDOUT_FILENO, sMsg, nLen);
+        sayError(sData);                    // the reason sent by Ithaca
         return -1;
     }
 
-    psOk = strtok(sData, "&");
-    psId = strtok(NULL, "&");
-    psOrigin = strtok(NULL, "&");
-    psDest = strtok(NULL, "&");
-    psReward = strtok(NULL, "&");
+    // OK&<VoyageID>&<Object>&<Destination>&<Reward>
+    char *psOk = strtok(sData, "&");
+    char *psId = strtok(NULL, "&");
+    char *psOrigin = strtok(NULL, "&");
+    char *psDest = strtok(NULL, "&");
+    char *psReward = strtok(NULL, "&");
     if (!psOk || !psId || !psOrigin || !psDest || !psReward) {
-        write(STDOUT_FILENO, "Error: malformed reply from Ithaca.\n", strlen("Error: malformed reply from Ithaca.\n"));
+        say("Error: malformed reply from Ithaca.\n");
         return -1;
     }
 
-    pstShip->stVoyage.nId = atoi(psId);
-    strncpy(pstShip->stVoyage.sOrigin, psOrigin, sizeof(pstShip->stVoyage.sOrigin) - 1);
-    pstShip->stVoyage.sOrigin[sizeof(pstShip->stVoyage.sOrigin) - 1] = '\0';
-    strncpy(pstShip->stVoyage.sDestination, psDest, sizeof(pstShip->stVoyage.sDestination) - 1);
-    pstShip->stVoyage.sDestination[sizeof(pstShip->stVoyage.sDestination) - 1] = '\0';
-    pstShip->stVoyage.nReward = atoi(psReward);
-    pstShip->nHasVoyage = 1;
+    if (setVoyage(pstShip, atoi(psId), psOrigin, psDest, atoi(psReward)) < 0) {
+        say("Error: out of memory.\n");
+        return -1;
+    }
 
-    nLen = snprintf(sMsg, sizeof(sMsg), "Voyage %d accepted.\nDestination: %s.\n", pstShip->stVoyage.nId, pstShip->stVoyage.sDestination);
-    write(STDOUT_FILENO, sMsg, nLen);
-
+    char *psMsg = NULL;
+    if (asprintf(&psMsg, "Voyage %d accepted.\nDestination: %s.\n",
+                 pstShip->stVoyage.nId, pstShip->stVoyage.psDestination) < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
     return 0;
 }
 
+/* ---------- sailing ---------- */
+
 static const tKnownIsland *findKnownIsland(const tShip *pstShip, const char *psName) {
     for (int i = 0; i < pstShip->nNumIslands; i++) {
-        if (strcmp(pstShip->pstIslands[i].sName, psName) == 0) {
+        if (strcasecmp(pstShip->pstIslands[i].sName, psName) == 0) {
             return &pstShip->pstIslands[i];
         }
     }
@@ -207,8 +269,8 @@ static const tKnownIsland *findKnownIsland(const tShip *pstShip, const char *psN
 static int isDirectRoute(const tShip *pstShip, const char *psFrom, const char *psTo) {
     for (int i = 0; i < pstShip->nNumRoutes; i++) {
         const tKnownRoute *pstR = &pstShip->pstRoutes[i];
-        if ((strcmp(pstR->sA, psFrom) == 0 && strcmp(pstR->sB, psTo) == 0) ||
-            (strcmp(pstR->sA, psTo) == 0 && strcmp(pstR->sB, psFrom) == 0)) {
+        if ((strcasecmp(pstR->sA, psFrom) == 0 && strcasecmp(pstR->sB, psTo) == 0) ||
+            (strcasecmp(pstR->sA, psTo) == 0 && strcasecmp(pstR->sB, psFrom) == 0)) {
             return 1;
         }
     }
@@ -227,12 +289,11 @@ static void leaveCurrentPort(tShip *pstShip) {
         pnFd = &pstShip->nIslandFd;
         ucType = TYPE_ISLAND_LEAVE;
     } else {
-        // already at sea
-        return;
+        return;                             // already at sea
     }
 
     if (sendFrame(*pnFd, ucType, FLAG_REQUEST, NULL, 0) == 0) {
-        recvFrame(*pnFd, &stReply);             // wait for the confirmation; we leave either way
+        recvFrame(*pnFd, &stReply);         // wait for the confirmation; we leave either way
     }
     closeSocket(pnFd);
 }
@@ -245,7 +306,6 @@ static int totalProvisions(const tShip *pstShip) {
     return nTotal;
 }
 
-//TODO: make less ai looking
 static void consumeProvisions(tShip *pstShip, int nKg) {
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems && nKg > 0; i++) {
         tFood *pstFood = &pstShip->stConfig.pstFoodSupplies[i];
@@ -260,6 +320,13 @@ static long nowMs(void) {
     clock_gettime(CLOCK_MONOTONIC, &stTs);
     return stTs.tv_sec * 1000L + stTs.tv_nsec / 1000000L;
 }
+
+static long nowMs(void) {
+    struct timespec stTs;
+    clock_gettime(CLOCK_MONOTONIC, &stTs);
+    return stTs.tv_sec * 1000L + stTs.tv_nsec / 1000000L;
+}
+
 
 static int waitForDocking(tShip *pstShip, const char *psIsland) {
     struct pollfd astFds[1];
@@ -321,73 +388,88 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
 int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
 
-    const tKnownIsland *pstDest;
     tFrame stReply;
     char sData[FRAME_DATA_SIZE + 1];
-    char *sMsg;
-    char *sFrom;
-    int nLen, nFd, nFromIthaca;
+    char *psMsg = NULL;
+    int nFd;
+
     if (pstShip->psLocation == NULL || pstShip->psLocation[0] == '\0') {
-        write(STDOUT_FILENO, "Error: you are not at any port.\n", strlen("Error: you are not at any port.\n"));
+        say("Error: you are not at any port.\n");
         return -1;
     }
 
-    //Get the destination from the command arguments
-    nFromIthaca = (strcasecmp(pstShip->psLocation, "Ithaca") == 0);
-    pstDest = findKnownIsland(pstShip, ppsArgv[0]);
+    int nFromIthaca = (strcasecmp(pstShip->psLocation, "Ithaca") == 0);
+    const tKnownIsland *pstDest = findKnownIsland(pstShip, ppsArgv[0]);
 
-    //Check if the destination is valid and reachable from the current location
-    if (pstDest == NULL || (nFromIthaca ? strcasecmp(pstDest->sName, pstShip->stConfig.psIslandName) != 0 : !isDirectRoute(pstShip, pstShip->pstIslands, pstDest->sName))) {
-        nLen = snprintf(sMsg, sizeof(sMsg), "We can't sail to %s from here...\n", ppsArgv[0]);
-        write(STDOUT_FILENO, sMsg, nLen);
+    // From Ithaca only the starting island is valid; from an island, only direct routes
+    int nReachable = 0;
+    if (pstDest != NULL) {
+        if (nFromIthaca) {
+            nReachable = (strcasecmp(pstDest->sName, pstShip->stConfig.psIslandName) == 0);
+        } else {
+            nReachable = isDirectRoute(pstShip, pstShip->psLocation, pstDest->sName);
+        }
+    }
+    if (!nReachable) {
+        if (asprintf(&psMsg, "We can't sail to %s from here...\n", ppsArgv[0]) < 0) {
+            psMsg = NULL;
+        }
+        sayAndFree(psMsg);
         return -1;
     }
 
-    //Diconnect from Ithaca/current island
-    nLen = asprintf(&sMsg, "Leaving %s...\nSailing to %s...\n", pstShip->psLocation, pstDest->sName);
-    write(STDOUT_FILENO, sMsg, nLen);
+    if (asprintf(&psMsg, "Leaving %s...\nSailing to %s...\n", pstShip->psLocation, pstDest->sName) < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
     leaveCurrentPort(pstShip);
 
-    //Arrive at the destination island
     nFd = connectToServer(pstDest->sIp, pstDest->nPort);
     if (nFd < 0) {
-        nLen = snprintf(sMsg, sizeof(sMsg), "Error: cannot reach %s.\n", pstDest->sName);
-        write(STDOUT_FILENO, sMsg, nLen);
-        return -1;                              // at sea; sLocation still holds the last port
+        psMsg = NULL;
+        if (asprintf(&psMsg, "Error: cannot reach %s.\n", pstDest->sName) < 0) {
+            psMsg = NULL;
+        }
+        sayAndFree(psMsg);
+        return -1;                          // at sea; psLocation still holds the last port
     }
 
-    sendTextFrame(nFd, TYPE_ISLAND_ARRIVE, FLAG_REQUEST, pstShip->stConfig.psName);
-
-    if (recvFrame(nFd, &stReply) != 1) {
-        write(STDOUT_FILENO, "Error: the island did not answer.\n", strlen("Error: the island did not answer.\n"));
-        close(nFd);
+    if (sendTextFrame(nFd, TYPE_ISLAND_ARRIVE, FLAG_REQUEST, pstShip->stConfig.psName) != 0
+        || recvFrame(nFd, &stReply) != 1) {
+        say("Error: the island did not answer.\n");
+        closeSocket(&nFd);
         return -1;
     }
     frameDataToString(&stReply, sData, sizeof(sData));
-    if (stReply.ucFlags != FLAGS_OK) {          // data is the reason
-        nLen = snprintf(sMsg, sizeof(sMsg), "Error: %s\n", sData);
-        write(STDOUT_FILENO, sMsg, nLen);
-        close(nFd);
+    if (stReply.ucFlags != FLAGS_OK) {      // data is the reason
+        sayError(sData);
+        closeSocket(&nFd);
         return -1;
     }
 
     pstShip->nIslandFd = nFd;
-    nLen = snprintf(sMsg, sizeof(sMsg), "Connected to %s.\n", pstDest->sName);
-    write(STDOUT_FILENO, sMsg, nLen);
+    psMsg = NULL;
+    if (asprintf(&psMsg, "\nWaiting off the coast of %s...\n", pstDest->sName) < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
 
-    //Check if the island has space to dock the ship
     if (strcmp(sData, "WAIT") == 0) {
-        write(STDOUT_FILENO, "The harbor is full. We drop anchor and wait.\n", strlen("The harbor is full. We drop anchor and wait.\n"));
+        say("The harbor is full. We drop anchor and wait.\n>>> THE TIDE IS AGAINST US.\n");
         if (!waitForDocking(pstShip, pstDest->sName)) {
             return -1;
         }
     } else {
-        nLen = snprintf(sMsg, sizeof(sMsg), "%s has granted access to the port.\n", pstDest->sName);
-        write(STDOUT_FILENO, sMsg, nLen);
+        psMsg = NULL;
+        if (asprintf(&psMsg, "%s has granted access to the port.\n", pstDest->sName) < 0) {
+            psMsg = NULL;
+        }
+        sayAndFree(psMsg);
     }
 
-    //Connect to the destination island
-    strncpy(pstShip->psLocation, pstDest->sName, sizeof(pstShip->psLocation) - 1);
-    pstShip->psLocation[sizeof(pstShip->psLocation) - 1] = '\0';
+    if (setLocation(pstShip, pstDest->sName) < 0) {
+        say("Error: out of memory.\n");
+        return -1;
+    }
     return 0;
 }
