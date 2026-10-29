@@ -77,7 +77,7 @@ tVoyage *parseVoyages(char *psVoyagesPath, int *pnNumVoyages) {
     int nCount = 0;
     char *psBuf = NULL;
     char *psBufCopy = NULL;
-    char *psLine = NULL;
+    //char *psLine = NULL;
     char *psTok = NULL;
     tVoyage *pstVoyages = NULL;
 
@@ -108,7 +108,7 @@ tVoyage *parseVoyages(char *psVoyagesPath, int *pnNumVoyages) {
     }
     free(psBufCopy);
 
-    pstVoyages = malloc(sizeof(tVoyage) * nCount);
+    pstVoyages = calloc(nCount, sizeof(tVoyage));
     if (!pstVoyages && nCount > 0) {
         write(STDERR_FILENO, "Error: malloc failed\n", strlen("Error: malloc failed\n"));
         exit(EXIT_FAILURE);
@@ -122,6 +122,9 @@ tVoyage *parseVoyages(char *psVoyagesPath, int *pnNumVoyages) {
         pstVoyages[i].psDestination = dupString(strtok(NULL, " \n"));
         pstVoyages[i].nReward       = atoi(strtok(NULL, " \n"));
         psTok = strtok(NULL, " \n");
+
+        pstVoyages[i].nId = i + 1;                   // IDs are the 1-based line number
+        pstVoyages[i].eState = VOYAGE_AVAILABLE;
     }
 
     free(psBuf);
@@ -146,6 +149,7 @@ void freeVoyages(tVoyage *pstVoyages, int nNumVoyages) {
             free(pstVoyages[i].psOrigin);
             free(pstVoyages[i].psFile);
             free(pstVoyages[i].psDestination);
+            free(pstVoyages[i].sOwner);
         }
         free(pstVoyages);
     }
