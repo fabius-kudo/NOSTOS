@@ -73,7 +73,12 @@ int main(int argc, char *argv[]) {
     stIthaca = parseIthaca(argv[1]);
     pstVoyages = parseVoyages(argv[2], &nNumVoyages);
 
-    //test
+    tVoyageStore stStore;
+    stStore.pstVoyages = pstVoyages;
+    stStore.nNumVoyages = nNumVoyages;
+    pthread_mutex_init(&stStore.stMutex, NULL);
+
+    //test TODO: remove
     nLen = asprintf(&psBuf, "%s %s %s %d\n\n", stIthaca.psServerName, stIthaca.psPath, stIthaca.psIpAddress, stIthaca.nPort);
     write(STDOUT_FILENO, psBuf, nLen);
 
@@ -109,12 +114,13 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        tClientSession *pstSession = malloc(sizeof(tClientSession));
+        tClientSession *pstSession = calloc(1, sizeof(tClientSession));
         if (!pstSession) {
             close(nClientFd);
             continue;
         }
         pstSession->nFd = nClientFd;
+        pstSession->pstStore = &stStore;
 
         pthread_t nThreadId;
         if (pthread_create(&nThreadId, NULL, clientThread, pstSession) != 0) {
@@ -128,6 +134,8 @@ int main(int argc, char *argv[]) {
     write(STDOUT_FILENO, "\nIthaca closes the harbor.\n", strlen("\nIthaca closes the harbor.\n"));
 
     closeSocket(&nServerFd);
+    closeSocket(&nServerFd);
+    pthread_mutex_destroy(&stStore.stMutex);
     freeIthaca(&stIthaca);
     freeVoyages(pstVoyages, nNumVoyages);
 

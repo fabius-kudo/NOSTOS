@@ -60,7 +60,13 @@ int main(int argc, char *argv[]) {
 
     signal(SIGINT, handleExit);
 
+    //init ship
+    memset(&stShip, 0, sizeof(stShip)); 
+    stShip.nIthacaFd = -1;
+    stShip.nIslandFd = -1;
+
     stShip.stConfig = parseOdysseus(argv[1]);
+
 
     while (!gnStop) {
         write(STDOUT_FILENO, "$ ", 2);
@@ -72,7 +78,10 @@ int main(int argc, char *argv[]) {
     }
 
     write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", 29);
+    if (stShip.nIthacaFd >= 0) close(stShip.nIthacaFd);
+    if (stShip.nIslandFd >= 0) close(stShip.nIslandFd);
     freeOdysseus(&stShip.stConfig);
+    free(stShip.psLocation);
 
     if (gnStop) {
         signal(SIGINT, SIG_DFL);

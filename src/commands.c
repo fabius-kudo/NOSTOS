@@ -65,6 +65,7 @@ int tokenizeLine(char *psLine, char *argv[], int nMaxTokens) {
     return nArgc;
 }
 
+//changed
 /***********************************************
  *
  * @Name: findCommand
@@ -99,9 +100,9 @@ static const tCommand *findCommand(const tCommand *pstCmds, int nNumCmds,
 static void executeCommand(tShip *pstShip, tCmdId id, int nArgc, char *ppsArgs[]) {
     switch (id) {
         case CMD_CONNECT_ITHACA: cmdConnectIthaca(pstShip, nArgc, ppsArgs); break;
-        case CMD_LIST_VOYAGES: cmdListVoyages(pstShip, nArgc, ppsArgs);   break;
-        case CMD_ACCEPT: cmdAcceptVoyage(pstShip, nArgc, ppsArgs);  break;
-        case CMD_SAIL: cmdSail(pstShip, nArgc, ppsArgs);          break;
+        case CMD_LIST_VOYAGES: cmdListVoyages(pstShip, nArgc, ppsArgs); break;
+        case CMD_ACCEPT: cmdAcceptVoyage(pstShip, nArgc, ppsArgs); break;
+        case CMD_SAIL: cmdSail(pstShip, nArgc, ppsArgs); break;
         case CMD_MAP:
         case CMD_LIST_MARKET:
         case CMD_BUY:
@@ -113,6 +114,7 @@ static void executeCommand(tShip *pstShip, tCmdId id, int nArgc, char *ppsArgs[]
     }
 }
 
+//changed
 /***********************************************
  *
  * @Name: processLine

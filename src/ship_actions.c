@@ -1,7 +1,14 @@
 #include "ship_actions.h"
-#include "ship_config.h"
-#include "protocol.h"
-#include "socket_utils.h"
+
+static int setLocation(tShip *pstShip, const char *psName) {
+    char *psCopy = dupString(psName);
+    if (psCopy == NULL) {
+        return -1;
+    }
+    free(pstShip->psLocation);          // free(NULL) is fine on the first call
+    pstShip->psLocation = psCopy;
+    return 0;
+}
 
 int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
     (void) argc;
@@ -21,16 +28,50 @@ int cmdConnectIthaca(tShip *pstShip, int argc, char *argv[]) {
     }
 
     // 0x01 request carrying the Odysseus name
-    sendFrame(nFd, TYPE_CONNECT_ITHACA, FLAG_REQUEST, pstShip->stConfig.psName, strlen(pstShip->stConfig.psName));
+    // sendFrame(nFd, TYPE_CONNECT_ITHACA, FLAG_REQUEST, pstShip->stConfig.psName, strlen(pstShip->stConfig.psName));
 
-    if (recvFrame(nFd, &stReply) != 1 || stReply.ucFlags != FLAGS_OK) {
-        write(STDOUT_FILENO, "Error: Ithaca refused the connection.\n", strlen("Error: Ithaca refused the connection.\n"));
-        close(nFd);
+    // if (recvFrame(nFd, &stReply) != 1 || stReply.ucFlags != FLAGS_OK) {
+    //     write(STDOUT_FILENO, "Error: Ithaca refused the connection.\n", strlen("Error: Ithaca refused the connection.\n"));
+    //     close(nFd);
+    //     return -1;
+    // }
+
+    //TEST TODO REMOVE
+    int nRet = sendFrame(nFd, TYPE_CONNECT_ITHACA, FLAG_REQUEST,
+                        pstShip->stConfig.psName, (int)strlen(pstShip->stConfig.psName));
+    if (nRet != 0) {
+        char sDbg[100];
+        int n = snprintf(sDbg, sizeof(sDbg), "DEBUG: sendFrame returned %d\n", nRet);
+        write(STDOUT_FILENO, sDbg, n);
+        closeSocket(&nFd);
         return -1;
     }
 
+    nRet = recvFrame(nFd, &stReply);
+    if (nRet != 1) {
+        char sDbg[100];
+        int n = snprintf(sDbg, sizeof(sDbg), "DEBUG: recvFrame returned %d\n", nRet);
+        write(STDOUT_FILENO, sDbg, n);
+        closeSocket(&nFd);
+        return -1;
+    }
+
+    if (stReply.ucFlags != FLAGS_OK) {
+        char sData[FRAME_DATA_SIZE + 1];
+        char sDbg[400];
+        frameDataToString(&stReply, sData, sizeof(sData));
+        int n = snprintf(sDbg, sizeof(sDbg), "DEBUG: flags=0x%02X reason=[%s]\n", stReply.ucFlags, sData);
+        write(STDOUT_FILENO, sDbg, n);
+        closeSocket(&nFd);
+        return -1;
+    }
+    //end test
+
+    if (setLocation(pstShip, "Ithaca") < 0) {
+    closeSocket(&nFd);
+    return -1;
+    }
     pstShip->nIthacaFd = nFd;
-    strcpy(pstShip->psLocation, "Ithaca");
     write(STDOUT_FILENO, "Connected to Ithaca.\n", strlen("Connected to Ithaca.\n"));
     return 0;
 }
@@ -259,7 +300,7 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     char *sMsg;
     char *sFrom;
     int nLen, nFd, nFromIthaca;
-    if (pstShip->psLocation[0] == '\0') {
+    if (pstShip->psLocation == NULL || pstShip->psLocation[0] == '\0') {
         write(STDOUT_FILENO, "Error: you are not at any port.\n", strlen("Error: you are not at any port.\n"));
         return -1;
     }
@@ -276,9 +317,7 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
 
     //Diconnect from Ithaca/current island
-    strncpy(sFrom, pstShip->psLocation, sizeof(sFrom) - 1);
-    sFrom[sizeof(sFrom) - 1] = '\0';
-    nLen = snprintf(sMsg, sizeof(sMsg), "Leaving %s...\nSailing to %s...\n", sFrom, pstDest->sName);
+    nLen = asprintf(&sMsg, "Leaving %s...\nSailing to %s...\n", pstShip->psLocation, pstDest->sName);
     write(STDOUT_FILENO, sMsg, nLen);
     leaveCurrentPort(pstShip);
 
