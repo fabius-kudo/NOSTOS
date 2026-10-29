@@ -377,12 +377,8 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
         write(STDOUT_FILENO, sMsg, nLen);
 
         if (totalProvisions(pstShip) <= 0) {
-            psMsg = NULL;
-            if (asprintf(&psMsg, "\nThe crew has run out of provisions.\nOdysseus %s has been lost at sea.\n",
-                         pstShip->stConfig.psName) < 0) {
-                psMsg = NULL;
-            }
-            sayAndFree(psMsg);
+            nLen = snprintf(sMsg, sizeof(sMsg),"\nThe crew has run out of provisions.\nOdysseus %s has been lost at sea.\n", pstShip->stConfig.psName);
+            write(STDOUT_FILENO, sMsg, nLen);
             closeSocket(&pstShip->nIslandFd);
             return 0;
         }
