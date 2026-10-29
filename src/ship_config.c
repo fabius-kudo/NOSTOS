@@ -65,6 +65,28 @@ tOdysseus parseOdysseus(char * psConfigPath) {
 
 }
 
+// Builds the runtime ship state from the parsed config. Returns 0 on success, -1 on failure.
+int initShip(tShip *pstShip, tOdysseus stConfig) {
+    memset(pstShip, 0, sizeof(*pstShip));
+    pstShip->nIthacaFd = -1;
+    pstShip->nIslandFd = -1;
+    pstShip->stConfig = stConfig;              // the ship now owns the config's strings
+    pstShip->nMoney = stConfig.nInitialMoney;
+
+    pstShip->pstIslands = calloc(1, sizeof(tKnownIsland));
+    if (pstShip->pstIslands == NULL) {
+        return -1;
+    }
+    pstShip->pstIslands[0].sName = dupString(stConfig.psIslandName);
+    pstShip->pstIslands[0].sIp   = dupString(stConfig.psIslandIp);
+    pstShip->pstIslands[0].nPort = stConfig.nIslandPort;
+    if (pstShip->pstIslands[0].sName == NULL || pstShip->pstIslands[0].sIp == NULL) {
+        return -1;                             // caller runs releaseShip
+    }
+    pstShip->nNumIslands = 1;
+    return 0;
+}
+
 /***********************************************
  *
  * @Name: freeOdysseus

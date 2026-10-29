@@ -76,6 +76,7 @@ typedef struct {
 } tShip;
 
 tOdysseus parseOdysseus(char *psConfigPath);
+int initShip(tShip *pstShip, tOdysseus stConfig);
 void freeOdysseus(tOdysseus *pstOd);
 
 #endif

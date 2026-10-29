@@ -62,12 +62,13 @@ int main(int argc, char *argv[]) {
 
     //init ship
 
-    memset(&stShip, 0, sizeof(stShip)); 
-    stShip.nIthacaFd = -1;
-    stShip.nIslandFd = -1;
-
     stShip.stConfig = parseOdysseus(argv[1]);
 
+    if (initShip(&stShip, stShip.stConfig) < 0) {
+        releaseShip(&stShip);
+        write(STDERR_FILENO, "Error: out of memory\n", 21);
+        return EXIT_FAILURE;
+    }
 
     while (!gnStop) {
         write(STDOUT_FILENO, "$ ", 2);
@@ -77,8 +78,6 @@ int main(int argc, char *argv[]) {
         processLine(&stShip, apsTokens, nTokenCount);
         free(psLine);
     }
-
-    
 
     write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", 29);
 
