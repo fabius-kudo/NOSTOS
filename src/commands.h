@@ -17,6 +17,10 @@
 #include <strings.h>
 #include <unistd.h>
 
+//prj includes
+#include "ship_actions.h"
+#include "ship_config.h"
+
 // Constant Declarations
 #define MAX_ARGS 4
 
@@ -29,13 +33,27 @@ typedef enum {
     ARG_TEXT
 } tArgKind;
 
+typedef enum {
+    CMD_CONNECT_ITHACA,
+    CMD_LIST_VOYAGES,
+    CMD_ACCEPT,
+    CMD_SAIL,
+    CMD_MAP,
+    CMD_LIST_MARKET,
+    CMD_BUY,
+    CMD_SELL,
+    CMD_STATUS,
+    CMD_DELIVER,
+    CMD_CLAIM
+} tCmdId;
+
 typedef struct {
     const char *psWord1;
-    const char *psWord2;
+    const char *psWord2;       // NULL for one-word commands
     int nNumArgs;
-    tArgKind aArgKinds[2];
+    int aArgKinds[2];          // ARG_NUMERIC / ARG_TEXT (keep your own type)
     const char *psUsage;
-    tCommandHandler fHandler;
+    tCmdId id;                 // replaces the function pointer
 } tCommand;
 
 void processLine(tShip *pstShip, char *ppsTokens[], int nTokenCount);

@@ -1,46 +1,67 @@
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 #include "voyage_service.h"
 
-static int handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
-    char sName[FRAME_DATA_SIZE + 1];
-    char *sLog;
-    int nLen;
+// Prints ">>> <name> <text>\n" in a single write so threads don't interleave lines.
+static void logEvent(const char *psName, const char *psText) {
+    char *psLog = NULL;
+    int nLen = asprintf(&psLog, ">>> %s %s\n", psName, psText);
 
+    if (nLen >= 0) {
+        write(STDOUT_FILENO, psLog, nLen);
+        free(psLog);
+    }
+}
+
+static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     if (pstFrame->ucDataLength == 0) {
         sendTextFrame(pstSession->nFd, TYPE_CONNECT_ITHACA, FLAGS_ERR, "EMPTY_NAME");
-        return 0;                   // stay connected, let them retry
+        return;                     // stay connected, let them retry
     }
     if (pstSession->nIdentified) {
         sendTextFrame(pstSession->nFd, TYPE_CONNECT_ITHACA, FLAGS_ERR, "ALREADY_CONNECTED");
-        return 0;
+        return;
     }
 
-    frameDataToString(pstFrame, sName, sizeof(sName));
-
-    strncpy(pstSession->sName, sName, sizeof(pstSession->sName) - 1);
-    pstSession->sName[sizeof(pstSession->sName) - 1] = '\0';
+    // frameDataToString always NUL-terminates and truncates to the buffer size
+    frameDataToString(pstFrame, pstSession->sName, sizeof(pstSession->sName));
     pstSession->nIdentified = 1;
 
     sendTextFrame(pstSession->nFd, TYPE_CONNECT_ITHACA, FLAGS_OK, "OK");
-
-    nLen = snprintf(sLog, sizeof(sLog), ">>> %s connected to Ithaca.\n", pstSession->sName);
-    write(STDOUT_FILENO, sLog, nLen);
-    return 0;
+    logEvent(pstSession->sName, "connected to Ithaca.");
 }
 
-void handleListVoyages(tClientSession *pstSession) {
+static void handleDisconnect(tClientSession *pstSession) {
+    if (!pstSession->nIdentified) {
+        sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_ERR, "NOT_CONNECTED");
+        return;
+    }
+
+    logEvent(pstSession->sName, "has left Ithaca. Fair winds!");
+    pstSession->sName[0] = '\0';
+    pstSession->nIdentified = 0;
+
+    sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_OK, "OK");
+}
+
+static void handleListVoyages(tClientSession *pstSession) {
     tVoyageStore *pstStore = pstSession->pstStore;
     tVoyage *pstAvail;
     char sData[FRAME_DATA_SIZE + 1];
-    char *sLog;
     int nTotal = 0;
     int nLen;
 
     pstAvail = malloc(sizeof(tVoyage) * (pstStore->nNumVoyages > 0 ? pstStore->nNumVoyages : 1));
     if (pstAvail == NULL) {
         sendTextFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_ERR, "INTERNAL_ERROR");
-        //return -1;
+        return;
     }
-    
+
+    // Copy the available voyages under the lock, send them after releasing it.
+    // The copies are shallow: they share the store's strings, which are not freed while running.
     pthread_mutex_lock(&pstStore->stMutex);
     for (int i = 0; i < pstStore->nNumVoyages; i++) {
         if (pstStore->pstVoyages[i].eState == VOYAGE_AVAILABLE) {
@@ -54,7 +75,8 @@ void handleListVoyages(tClientSession *pstSession) {
     }
     for (int i = 0; i < nTotal; i++) {
         nLen = snprintf(sData, sizeof(sData), "%d&%d&%d&%s&%s&%d",
-                        i + 1, nTotal, pstAvail[i].nId, pstAvail[i].psOrigin, pstAvail[i].psDestination, pstAvail[i].nReward);
+                        i + 1, nTotal, pstAvail[i].nId, pstAvail[i].psOrigin,
+                        pstAvail[i].psDestination, pstAvail[i].nReward);
         if (nLen < 0 || nLen > FRAME_DATA_SIZE ||
             sendFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_OK, sData, nLen) < 0) {
             break;
@@ -62,21 +84,18 @@ void handleListVoyages(tClientSession *pstSession) {
     }
     free(pstAvail);
 
-    nLen = snprintf(sLog, sizeof(sLog), ">>> %s requested available voyages.\n", pstSession->sName);
-    write(STDOUT_FILENO, sLog, nLen);
-    return 0;
+    logEvent(pstSession->sName, "requested available voyages.");
 }
 
-void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
+static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     tVoyageStore *pstStore = pstSession->pstStore;
     char sData[FRAME_DATA_SIZE + 1];
     char sReply[FRAME_DATA_SIZE + 1];
     const char *psError = NULL;
-    char *sLog;
     tVoyage *pstVoyage = NULL;
     int nId, nLen = 0;
 
-    //Get the voyage ID from the frame data
+    // Get the voyage ID from the frame data
     frameDataToString(pstFrame, sData, sizeof(sData));
     nId = atoi(sData);
     if (sData[0] == '\0' || nId <= 0) {
@@ -84,19 +103,19 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
         return;
     }
 
-    //Check if the voyage ID is valid and available
     pthread_mutex_lock(&pstStore->stMutex);
 
+    // The loop must not stop at the match: it also has to check that this ship
+    // doesn't already hold another voyage, which needs a pass over all of them.
     for (int i = 0; i < pstStore->nNumVoyages; i++) {
         tVoyage *pstV = &pstStore->pstVoyages[i];
 
         if (pstV->eState == VOYAGE_ASSIGNED && strcmp(pstV->sOwner, pstSession->sName) == 0) {
-            psError = "ALREADY_HAVE_VOYAGE";     // this ship still holds one
+            psError = "ALREADY_HAVE_VOYAGE";
             break;
         }
         if (pstV->nId == nId) {
             pstVoyage = pstV;
-            //TODO: idk if we can stop loop here
         }
     }
 
@@ -111,70 +130,40 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
             pstVoyage->sOwner[sizeof(pstVoyage->sOwner) - 1] = '\0';
 
             // Build the reply while the data is protected
-            nLen = snprintf(sReply, sizeof(sReply), "OK&%d&%s&%s&%d", 
-                    pstVoyage->nId, pstVoyage->psOrigin, pstVoyage->psDestination, pstVoyage->nReward);
+            nLen = snprintf(sReply, sizeof(sReply), "OK&%d&%s&%s&%d",
+                            pstVoyage->nId, pstVoyage->psOrigin,
+                            pstVoyage->psDestination, pstVoyage->nReward);
+
+            // Reply doesn't fit in a frame: undo the assignment right away
+            if (nLen < 0 || nLen > FRAME_DATA_SIZE) {
+                pstVoyage->eState = VOYAGE_AVAILABLE;
+                pstVoyage->sOwner[0] = '\0';
+                psError = "INTERNAL_ERROR";
+            }
         }
     }
 
     pthread_mutex_unlock(&pstStore->stMutex);
 
-    //If not valid, send an error response
     if (psError != NULL) {
         sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, psError);
-        return;
-    }    
-    
-    //If valid, mark the voyage as accepted and send a success response
-
-    //TODO: idk if we need this check, but just in case
-    if (nLen < 0 || nLen > FRAME_DATA_SIZE) {
-        // Reply doesn't fit in a frame: undo the assignment
-        pthread_mutex_lock(&pstStore->stMutex);
-        pstVoyage->eState = VOYAGE_AVAILABLE;
-        pstVoyage->sOwner[0] = '\0';
-        pthread_mutex_unlock(&pstStore->stMutex);
-        sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "INTERNAL_ERROR");
         return;
     }
 
     sendFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_OK, sReply, nLen);
 
-    nLen = snprintf(sLog, sizeof(sLog), ">>> Voyage %d assigned to %s.\n", pstVoyage->nId, pstSession->sName);
-    write(STDOUT_FILENO, sLog, nLen);
-}
-
-static int handleDisconnect(tClientSession *pstSession, tFrame *pstFrame) {
-    char sName[FRAME_DATA_SIZE + 1];
-    char *sLog;
-    int nLen;
-
-    if (pstFrame->ucDataLength == 0) {
-        sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_ERR, "EMPTY_NAME");
-        return 0;                   // stay connected, let them retry
+    char *psLog = NULL;
+    int nLogLen = asprintf(&psLog, ">>> Voyage %d assigned to %s.\n", nId, pstSession->sName);
+    if (nLogLen >= 0) {
+        write(STDOUT_FILENO, psLog, nLogLen);
+        free(psLog);
     }
-    if (pstSession->nIdentified) {
-        sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_ERR, "ALREADY_DISCONNECTED");
-        return 0;
-    }
-
-    frameDataToString(pstFrame, sName, sizeof(sName));
-
-    nLen = snprintf(sLog, sizeof(sLog), ">>> %s has left Ithaca. Fair winds!\n", pstSession->sName);
-    write(STDOUT_FILENO, sLog, nLen);
-
-    pstSession->sName[0] = '\0';
-    pstSession->nIdentified = 0;
-
-    sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_OK, "OK");
-
-    return 0;
 }
 
 void serveClient(tClientSession *pstSession) {
     tFrame stFrame;
-    int nKeepGoing = 1;
 
-    while (nKeepGoing) {
+    while (1) {
         int nRet = recvFrame(pstSession->nFd, &stFrame);
         if (nRet <= 0) {
             break;                  // 0 = peer closed/crashed, -1 = error
@@ -193,7 +182,7 @@ void serveClient(tClientSession *pstSession) {
 
         switch (stFrame.ucType) {
             case TYPE_CONNECT_ITHACA:
-                nKeepGoing = (handleConnect(pstSession, &stFrame) == 0);
+                handleConnect(pstSession, &stFrame);
                 break;
             case TYPE_LIST_VOYAGES:
                 handleListVoyages(pstSession);
@@ -202,8 +191,7 @@ void serveClient(tClientSession *pstSession) {
                 handleAccept(pstSession, &stFrame);
                 break;
             case TYPE_DISCONNECT:
-                //handleDisconnect(pstSession);
-                nKeepGoing = 0;
+                handleDisconnect(pstSession);
                 break;
             default:
                 sendTextFrame(pstSession->nFd, TYPE_NACK, FLAGS_ERR, "INVALID_TYPE");
