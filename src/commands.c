@@ -89,9 +89,9 @@ static void executeCommand(tShip *pstShip, tCmdId id, int nArgc, char *ppsArgs[]
         case CMD_ACCEPT: cmdAcceptVoyage(pstShip, nArgc, ppsArgs); break;
         case CMD_SAIL: cmdSail(pstShip, nArgc, ppsArgs); break;
         case CMD_MAP:
-        case CMD_LIST_MARKET:
-        case CMD_BUY:
-        case CMD_SELL:
+        case CMD_LIST_MARKET: cmdListMarket(pstShip, nArgc, ppsArgs); break;
+        case CMD_BUY: cmdBuy(pstShip, nArgc, ppsArgs); break;
+        case CMD_SELL: cmdSell(pstShip, nArgc, ppsArgs); break;
         case CMD_STATUS:
         case CMD_DELIVER:
         case CMD_CLAIM:
