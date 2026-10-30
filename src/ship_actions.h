@@ -4,6 +4,7 @@
 #include "ship_config.h"
 #include "protocol.h"
 #include "socket_utils.h"
+#include "SPHRAGIS Library-20260917/sphragis.h"
 #include <strings.h>
 #include <poll.h>
 #include <time.h>
@@ -20,6 +21,7 @@ int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]);
+int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]);
 
 void releaseShip(tShip *pstShip);
 
