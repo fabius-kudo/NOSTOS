@@ -44,7 +44,7 @@ typedef struct {
 
 typedef struct {
     int nId;
-    char *psOrigin;
+    char *psObject;
     char *psDestination;
     int nReward;
 } tActiveVoyage;

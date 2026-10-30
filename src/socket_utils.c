@@ -1,4 +1,5 @@
 #include "socket_utils.h"
+#include <errno.h>
 
 /***********************************************
  * @Name: createServerSocket
@@ -68,7 +69,9 @@ int connectToServer(const char *psIp, int nPort) {
     }
 
     if (connect(nFd, (struct sockaddr *)&stAddr, sizeof(stAddr)) < 0) {
+        int nErr = errno;
         close(nFd);
+        errno = nErr;
         return -1;
     }
     return nFd;

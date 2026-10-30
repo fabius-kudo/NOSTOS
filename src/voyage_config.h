@@ -37,7 +37,7 @@ typedef struct {
 
 typedef struct {
     int nId;
-    char *psOrigin;
+    char *psObject;
     char *psFile;
     char *psDestination;
     int nReward;

@@ -37,8 +37,8 @@ static int setLocation(tShip *pstShip, const char *psName) {
 }
 
 // Replaces the active voyage. Returns 0 on success, -1 on malloc failure.
-static int setVoyage(tShip *pstShip, int nId, const char *psOrigin, const char *psDest, int nReward) {
-    char *psObjCopy = dupString(psOrigin);
+static int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *psDest, int nReward) {
+    char *psObjCopy = dupString(psObject);
     char *psDestCopy = dupString(psDest);
 
     if (psObjCopy == NULL || psDestCopy == NULL) {
@@ -46,10 +46,10 @@ static int setVoyage(tShip *pstShip, int nId, const char *psOrigin, const char *
         free(psDestCopy);
         return -1;
     }
-    free(pstShip->stVoyage.psOrigin);
+    free(pstShip->stVoyage.psObject);
     free(pstShip->stVoyage.psDestination);
     pstShip->stVoyage.nId = nId;
-    pstShip->stVoyage.psOrigin = psObjCopy;
+    pstShip->stVoyage.psObject = psObjCopy;
     pstShip->stVoyage.psDestination = psDestCopy;
     pstShip->stVoyage.nReward = nReward;
     pstShip->nHasVoyage = 1;
@@ -62,7 +62,7 @@ void releaseShip(tShip *pstShip) {
     closeSocket(&pstShip->nIslandFd);
 
     free(pstShip->psLocation);
-    free(pstShip->stVoyage.psOrigin);
+    free(pstShip->stVoyage.psObject);
     free(pstShip->stVoyage.psDestination);
 
     for (int i = 0; i < pstShip->nNumIslands; i++) {
@@ -172,11 +172,11 @@ int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
             return 0;
         }
         char *psId = strtok(NULL, "&");
-        char *psOrigin = strtok(NULL, "&");
+        char *psObject = strtok(NULL, "&");
         char *psDest = strtok(NULL, "&");
         char *psReward = strtok(NULL, "&");
 
-        if (!psIndex || !psId || !psOrigin || !psDest || !psReward) {
+        if (!psIndex || !psId || !psObject || !psDest || !psReward) {
             say("Error: malformed reply from Ithaca.\n");
             return -1;
         }
@@ -192,7 +192,7 @@ int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         }
 
         char *psLine = NULL;
-        if (asprintf(&psLine, "%2s. %-22s -> %-10s [%s]\n", psId, psOrigin, psDest, psReward) < 0) {
+        if (asprintf(&psLine, "%s. %-20s -> %-10s [%s]\n", psId, psObject, psDest, psReward) < 0) {
             psLine = NULL;
         }
         sayAndFree(psLine);
@@ -232,15 +232,15 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     // OK&<VoyageID>&<Object>&<Destination>&<Reward>
     char *psOk = strtok(sData, "&");
     char *psId = strtok(NULL, "&");
-    char *psOrigin = strtok(NULL, "&");
+    char *psObject = strtok(NULL, "&");
     char *psDest = strtok(NULL, "&");
     char *psReward = strtok(NULL, "&");
-    if (!psOk || !psId || !psOrigin || !psDest || !psReward) {
+    if (!psOk || !psId || !psObject || !psDest || !psReward) {
         say("Error: malformed reply from Ithaca.\n");
         return -1;
     }
 
-    if (setVoyage(pstShip, atoi(psId), psOrigin, psDest, atoi(psReward)) < 0) {
+    if (setVoyage(pstShip, atoi(psId), psObject, psDest, atoi(psReward)) < 0) {
         say("Error: out of memory.\n");
         return -1;
     }
@@ -431,7 +431,7 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     nFd = connectToServer(pstDest->sIp, pstDest->nPort);
     if (nFd < 0) {
         psMsg = NULL;
-        if (asprintf(&psMsg, "Error: cannot reach %s.\n", pstDest->sName) < 0) {
+        if (asprintf(&psMsg, "Error: cannot reach %s (%s).\n", pstDest->sName, strerror(errno)) < 0) {
             psMsg = NULL;
         }
         sayAndFree(psMsg);
