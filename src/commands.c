@@ -11,21 +11,6 @@
 
 /***********************************************
  *
- * @Name: cmdDef
- * @Def: Default dummy command handler function.
- * @Arg: In: argc count of command arguments
- *       In: argv array of argument strings
- * @Ret: Returns 0.
- *
- ***********************************************/
-static int cmd_def(int argc, char *argv[]){
-    (void) argc;
-    (void) argv;
-    return 0;
-}
-
-/***********************************************
- *
  * @Name: isNumeric
  * @Def: Checks if a given string contains only numeric digits.
  * @Arg: In: psStr string to validate

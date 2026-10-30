@@ -12,6 +12,8 @@ static void sayAndFree(char *psMsg) {
     if (psMsg != NULL) {
         write(STDOUT_FILENO, psMsg, strlen(psMsg));
         free(psMsg);
+    } else{
+        say("asprintf error");
     }
 }
 
@@ -378,11 +380,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
 
         if (totalProvisions(pstShip) <= 0) {
             nLen = asprintf(&sMsg, "\nThe crew has run out of provisions.\nOdysseus %s has been lost at sea.\n", pstShip->stConfig.psName);
-            if (nLen < 0){
-                write(STDOUT_FILENO, "asprint error\n", strlen("asprint error\n"));
-            } else {
-                write(STDOUT_FILENO, sMsg, nLen);
-            }
+            sayAndFree(sMsg);
             closeSocket(&pstShip->nIslandFd);
             return 0;
         }
@@ -459,7 +457,7 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     sayAndFree(psMsg);
 
     if (strcmp(sData, "WAIT") == 0) {
-        say("The harbor is full. We drop anchor and wait.\n>>> THE TIDE IS AGAINST US.\n");
+        say("The harbor is full. We drop anchor and wait.\n");
         if (!waitForDocking(pstShip, pstDest->sName)) {
             return -1;
         }

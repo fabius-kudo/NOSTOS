@@ -61,7 +61,7 @@ static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
         pstSession->eState = SHIP_GONE; // port closing
         return -1;
     }
-    if (sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "OK") != 0) {
+    if (sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "DOCKED") != 0) {
         portLeave(pstSession->pstPort); // the ship died while queued: pass the dock on
         pstSession->eState = SHIP_GONE;
         return -1;
