@@ -19,6 +19,7 @@
 #include "port_control.h"
 #include "island_service.h"
 #include "socket_utils.h"
+#include "island_stock.h"
 
 static volatile sig_atomic_t gnStop = 0;
 
@@ -49,6 +50,7 @@ int main(int argc, char *argv[]) {
     tProduct *pstStock = NULL;
     tIsland stIsland;
     tPort stPort;
+    tStock stStock;
     struct sigaction stAct;
 
     if (argc != 3) {
@@ -72,6 +74,13 @@ int main(int argc, char *argv[]) {
         free(pstStock);
         exit(EXIT_FAILURE);
     }
+
+    //### stock setup
+    if (stockInit(&stStock, pstStock, nNumProducts, argv[2]) < 0) { 
+        //TODO: add other frees n stuff
+        exit(EXIT_FAILURE);
+    }
+    pstStock = NULL; 
 
     //####### 'server' setup
     nServerFd = createServerSocket(stIsland.psIpAddress, stIsland.nPort);
@@ -109,6 +118,9 @@ int main(int argc, char *argv[]) {
         pstSession->psIslandName = stIsland.psName;
         pstSession->eState = SHIP_NONE;
 
+        pstSession->pstStock = &stStock;    
+        pstSession->pstIsland = &stIsland;
+
         pthread_t nThreadId;
         if (pthread_create(&nThreadId, NULL, shipThread, pstSession) != 0) {
             close(nClientFd);
@@ -129,7 +141,7 @@ int main(int argc, char *argv[]) {
     // destroying the port, so no thread is still using the mutex or the semaphore.
     portDestroy(&stPort);                       // removes the System V semaphore from the kernel
     closeSocket(&nServerFd);
-    free(pstStock);
+    stockDestroy(&stStock);
     freeIsland(stIsland);
     return 0;
 }

@@ -12,6 +12,8 @@ static void sayAndFree(char *psMsg) {
     if (psMsg != NULL) {
         write(STDOUT_FILENO, psMsg, strlen(psMsg));
         free(psMsg);
+    } else{
+        say("asprintf error\n");
     }
 }
 
@@ -324,14 +326,13 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
     struct pollfd astFds[1];
     tFrame stFrame;
     char sData[FRAME_DATA_SIZE + 1];
-    char *sMsg;
-    int nLen;
+    char *psMsg = NULL;
 
     long nNextRation = nowMs() + RATION_INTERVAL_MS;
 
     astFds[0].fd = pstShip->nIslandFd;
     astFds[0].events = POLLIN;
-    
+
     while (1) {
         long nRemaining = nNextRation - nowMs();
         if (nRemaining < 0) {
@@ -349,40 +350,40 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
 
         if (nRet > 0) {
             if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
-                write(STDOUT_FILENO, "Error: connection to the island lost.\n", strlen("Error: connection to the island lost.\n"));
+                say("Error: connection to the island lost.\n");
                 closeSocket(&pstShip->nIslandFd);
                 return 0;
             }
             frameDataToString(&stFrame, sData, sizeof(sData));
-            if (stFrame.ucType == TYPE_ISLAND_ARRIVE && stFrame.ucFlags == FLAGS_OK && strcmp(sData, "DOCKED") == 0) {
-                nLen = asprintf(&sMsg, "\n%s has granted access to the port.\n", psIsland);
-                if (nLen < 0){
-                    write(STDOUT_FILENO, "asprint error\n", strlen("asprint error\n"));
-                } else {
-                    write(STDOUT_FILENO, sMsg, nLen);
+            if (stFrame.ucType == TYPE_ISLAND_ARRIVE && stFrame.ucFlags == FLAGS_OK
+                && strcmp(sData, "DOCKED") == 0) {
+                psMsg = NULL;
+                if (asprintf(&psMsg, "\n>>> %s has granted access to the port.\n", psIsland) < 0) {
+                    psMsg = NULL;
                 }
+                sayAndFree(psMsg);
                 return 1;
             }
             continue;
         }
-            
+
         consumeProvisions(pstShip, RATION_KG);
         nNextRation += RATION_INTERVAL_MS;
 
-        nLen = asprintf(&sMsg, "\n>>> The crew consumes another ration.\nProvisions remaining: %d kg\n", totalProvisions(pstShip));
-        if (nLen < 0){
-            write(STDOUT_FILENO, "asprint error\n", strlen("asprint error\n"));
-        } else {
-            write(STDOUT_FILENO, sMsg, nLen);
+        psMsg = NULL;
+        if (asprintf(&psMsg, "\n>>> The crew consumes another ration.\nProvisions remaining: %d kg\n",
+                     totalProvisions(pstShip)) < 0) {
+            psMsg = NULL;
         }
+        sayAndFree(psMsg);
 
         if (totalProvisions(pstShip) <= 0) {
-            nLen = asprintf(&sMsg, "\nThe crew has run out of provisions.\nOdysseus %s has been lost at sea.\n", pstShip->stConfig.psName);
-            if (nLen < 0){
-                write(STDOUT_FILENO, "asprint error\n", strlen("asprint error\n"));
-            } else {
-                write(STDOUT_FILENO, sMsg, nLen);
+            psMsg = NULL;
+            if (asprintf(&psMsg, "\nThe crew has run out of provisions.\nOdysseus %s has been lost at sea.\n",
+                         pstShip->stConfig.psName) < 0) {
+                psMsg = NULL;
             }
+            sayAndFree(psMsg);
             closeSocket(&pstShip->nIslandFd);
             return 0;
         }
@@ -459,7 +460,7 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     sayAndFree(psMsg);
 
     if (strcmp(sData, "WAIT") == 0) {
-        say("The harbor is full. We drop anchor and wait.\n>>> THE TIDE IS AGAINST US.\n");
+        say("The harbor is full. We drop anchor and wait.\n");
         if (!waitForDocking(pstShip, pstDest->sName)) {
             return -1;
         }
@@ -475,5 +476,324 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         say("Error: out of memory.\n");
         return -1;
     }
+    return 0;
+}
+
+//##### SHOP ACTIONS
+
+int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+    (void)ppsArgv;
+
+    tFrame stFrame;
+    char sData[FRAME_DATA_SIZE + 1];
+
+    if (pstShip->nIslandFd < 0 || pstShip->psLocation == NULL) {
+        say("Error: you are not docked at any island.\n");
+        return -1;
+    }
+    if (sendFrame(pstShip->nIslandFd, TYPE_LIST_MARKET, FLAG_REQUEST, NULL, 0) != 0) {
+        say("Error: connection to the island lost.\n");
+        closeSocket(&pstShip->nIslandFd);
+        return -1;
+    }
+
+    int nIndex = 0;
+    int nTotal = 1;
+    while (nIndex < nTotal) {
+        if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
+            say("Error: connection to the island lost.\n");
+            closeSocket(&pstShip->nIslandFd);
+            return -1;
+        }
+        frameDataToString(&stFrame, sData, sizeof(sData));
+
+        if (stFrame.ucFlags != FLAGS_OK) {              // error: data is the reason
+            sayError(sData);
+            return -1;
+        }
+
+        char *psIndex = strtok(sData, "&");
+        char *psTotal = strtok(NULL, "&");
+        char *psName = strtok(NULL, "&");
+        char *psAmount = strtok(NULL, "&");
+        char *psPrice = strtok(NULL, "&");
+        if (!psIndex || !psTotal || !psName || !psAmount || !psPrice) {
+            say("Error: malformed reply from the island.\n");
+            return -1;
+        }
+
+        nIndex = atoi(psIndex);
+        nTotal = atoi(psTotal);
+        if (nIndex <= 0 || nTotal <= 0) {
+            say("Error: malformed reply from the island.\n");
+            return -1;
+        }
+
+        char *psLine = NULL;
+
+        if (nIndex == 1) {
+            asprintf(&psLine, "--- %s MARKET ---\n" , pstShip->psLocation);
+            sayAndFree(psLine);
+        }
+
+        if (strcmp(psName, "MAP") == 0) {
+            if (asprintf(&psLine, "%-32s%s gold\n", "Map", psPrice) < 0) {
+                psLine = NULL;
+            }
+        } else {
+            if (asprintf(&psLine, "%-22s%4s kg %4s gold/kg\n", psName, psAmount, psPrice) < 0) {
+                psLine = NULL;
+            }
+        }
+        sayAndFree(psLine);
+    }
+    return 0;
+}
+
+/* ---------- trading helpers ---------- */
+
+static int isDocked(const tShip *pstShip) {
+    return pstShip->nIslandFd >= 0 && pstShip->psLocation != NULL
+           && strcasecmp(pstShip->psLocation, "Ithaca") != 0;
+}
+
+static int islandLost(tShip *pstShip) {
+    say("Error: connection to the island lost.\n");
+    closeSocket(&pstShip->nIslandFd);
+    return -1;
+}
+
+static int findCargo(const tShip *pstShip, const char *psName) {
+    for (int i = 0; i < pstShip->stConfig.nNumFoodItems; i++) {
+        if (strcasecmp(pstShip->stConfig.pstFoodSupplies[i].psProduct, psName) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Adds kilograms to the cargo, creating the entry if the ship doesn't carry the product yet.
+static int addCargo(tShip *pstShip, const char *psName, int nKg) {
+    int nIdx = findCargo(pstShip, psName);
+    tFood *pstNew;
+    char *psCopy;
+
+    if (nIdx >= 0) {
+        pstShip->stConfig.pstFoodSupplies[nIdx].nQuantity += nKg;
+        return 0;
+    }
+    psCopy = dupString(psName);
+    if (psCopy == NULL) {
+        return -1;
+    }
+    pstNew = realloc(pstShip->stConfig.pstFoodSupplies,
+                     sizeof(tFood) * (pstShip->stConfig.nNumFoodItems + 1));
+    if (pstNew == NULL) {
+        free(psCopy);
+        return -1;
+    }
+    pstShip->stConfig.pstFoodSupplies = pstNew;
+    pstNew[pstShip->stConfig.nNumFoodItems].psProduct = psCopy;
+    pstNew[pstShip->stConfig.nNumFoodItems].nQuantity = nKg;
+    pstShip->stConfig.nNumFoodItems++;
+    return 0;
+}
+
+// Silent LIST MARKET: finds the price of one product.
+// Returns 1 = found, 0 = the island doesn't list it, -1 = failure (message already printed).
+static int queryPrice(tShip *pstShip, const char *psProduct, int *pnPrice) {
+    tFrame stFrame;
+    char sData[FRAME_DATA_SIZE + 1];
+    int nIndex = 0;
+    int nTotal = 1;
+    int nFound = 0;
+
+    if (sendFrame(pstShip->nIslandFd, TYPE_LIST_MARKET, FLAG_REQUEST, NULL, 0) != 0) {
+        return islandLost(pstShip);
+    }
+    while (nIndex < nTotal) {                   // read every frame, even after the match
+        if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
+            return islandLost(pstShip);
+        }
+        frameDataToString(&stFrame, sData, sizeof(sData));
+        if (stFrame.ucFlags != FLAGS_OK) {
+            sayError(sData);
+            return -1;
+        }
+        char *psIndex = strtok(sData, "&");
+        char *psTotal = strtok(NULL, "&");
+        char *psName = strtok(NULL, "&");
+        char *psAmount = strtok(NULL, "&");
+        char *psPrice = strtok(NULL, "&");
+        if (!psIndex || !psTotal || !psName || !psAmount || !psPrice) {
+            say("Error: malformed reply from the island.\n");
+            return -1;
+        }
+        nIndex = atoi(psIndex);
+        nTotal = atoi(psTotal);
+        if (nIndex <= 0 || nTotal <= 0) {
+            say("Error: malformed reply from the island.\n");
+            return -1;
+        }
+        if (strcmp(psName, "MAP") != 0 && strcasecmp(psName, psProduct) == 0) {
+            *pnPrice = atoi(psPrice);
+            nFound = 1;
+        }
+    }
+    return nFound;
+}
+
+// Sends "<product>&<amount>" and reads the single reply. Returns 0, or -1 (message printed).
+static int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProduct,
+                        int nAmount, tFrame *pstReply) {
+    char *psData = NULL;
+    int nLen = asprintf(&psData, "%s&%d", psProduct, nAmount);
+    int nRet;
+
+    if (nLen < 0) {
+        say("Error: out of memory.\n");
+        return -1;
+    }
+    nRet = sendFrame(pstShip->nIslandFd, ucType, FLAG_REQUEST, psData, nLen);
+    free(psData);
+    if (nRet != 0 || recvFrame(pstShip->nIslandFd, pstReply) != 1) {
+        return islandLost(pstShip);
+    }
+    return 0;
+}
+
+// Parses "OK&<Product>&<Amount>&<Money>". Returns 0 or -1.
+static int parseTradeReply(char *psData, char **ppsProduct, int *pnAmount, int *pnMoney) {
+    char *psOk = strtok(psData, "&");
+    char *psAmount;
+    char *psMoney;
+
+    *ppsProduct = strtok(NULL, "&");
+    psAmount = strtok(NULL, "&");
+    psMoney = strtok(NULL, "&");
+    if (!psOk || !*ppsProduct || !psAmount || !psMoney) {
+        return -1;
+    }
+    *pnAmount = atoi(psAmount);
+    *pnMoney = atoi(psMoney);
+    return 0;
+}
+
+/* ---------- BUY / SELL ---------- */
+
+int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+
+    tFrame stReply;
+    char sData[FRAME_DATA_SIZE + 1];
+    char *psProduct = NULL;
+    char *psMsg = NULL;
+    int nAmount = atoi(ppsArgv[1]);
+    int nPrice = 0;
+    int nBoughtKg = 0;
+    int nCost = 0;
+    int nRes;
+
+    if (strcasecmp(ppsArgv[0], "MAP") == 0) {
+        say("BUY MAP is not implemented yet.\n");       // TODO: frame type 0x14
+        return -1;
+    }
+    if (!isDocked(pstShip)) {
+        say("Error: you are not docked at any island.\n");
+        return -1;
+    }
+    if (nAmount <= 0) {
+        say("Error: the amount must be positive.\n");
+        return -1;
+    }
+
+    nRes = queryPrice(pstShip, ppsArgv[0], &nPrice);
+    if (nRes < 0) {
+        return -1;
+    }
+    if (nRes == 0) {
+        sayError("the island does not sell that product");
+        return -1;
+    }
+    if (nAmount > pstShip->nMoney / nPrice) {           // same as nAmount * nPrice > nMoney, no overflow
+        say("Error: not enough gold.\n");
+        return -1;
+    }
+
+    if (tradeRequest(pstShip, TYPE_BUY, ppsArgv[0], nAmount, &stReply) < 0) {
+        return -1;
+    }
+    frameDataToString(&stReply, sData, sizeof(sData));
+    if (stReply.ucFlags != FLAGS_OK) {
+        sayError(sData);                                // reason from the island
+        return -1;
+    }
+    if (parseTradeReply(sData, &psProduct, &nBoughtKg, &nCost) < 0) {
+        say("Error: malformed reply from the island.\n");
+        return -1;
+    }
+
+    pstShip->nMoney -= nCost;
+    if (addCargo(pstShip, psProduct, nBoughtKg) < 0) {
+        say("Error: out of memory.\n");
+        return -1;
+    }
+    if (asprintf(&psMsg, "Bought %d kg of %s for %d gold.\n", nBoughtKg, psProduct, nCost) < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
+    return 0;
+}
+
+int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+
+    tFrame stReply;
+    char sData[FRAME_DATA_SIZE + 1];
+    char *psProduct = NULL;
+    char *psMsg = NULL;
+    int nAmount = atoi(ppsArgv[1]);
+    int nSoldKg = 0;
+    int nIncome = 0;
+    int nIdx;
+
+    if (!isDocked(pstShip)) {
+        say("Error: you are not docked at any island.\n");
+        return -1;
+    }
+    if (nAmount <= 0) {
+        say("Error: the amount must be positive.\n");
+        return -1;
+    }
+    nIdx = findCargo(pstShip, ppsArgv[0]);
+    if (nIdx < 0) {
+        sayError("you do not carry that product");
+        return -1;
+    }
+    if (pstShip->stConfig.pstFoodSupplies[nIdx].nQuantity < nAmount) {
+        sayError("not enough of that product in the cargo");
+        return -1;
+    }
+
+    if (tradeRequest(pstShip, TYPE_SELL, ppsArgv[0], nAmount, &stReply) < 0) {
+        return -1;
+    }
+    frameDataToString(&stReply, sData, sizeof(sData));
+    if (stReply.ucFlags != FLAGS_OK) {
+        sayError(sData);
+        return -1;
+    }
+    if (parseTradeReply(sData, &psProduct, &nSoldKg, &nIncome) < 0) {
+        say("Error: malformed reply from the island.\n");
+        return -1;
+    }
+
+    pstShip->stConfig.pstFoodSupplies[nIdx].nQuantity -= nSoldKg;
+    pstShip->nMoney += nIncome;
+    if (asprintf(&psMsg, "Sold %d kg of %s for %d gold.\n", nSoldKg, psProduct, nIncome) < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
     return 0;
 }
