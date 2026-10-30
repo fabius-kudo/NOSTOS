@@ -452,14 +452,20 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
 
     pstShip->nIslandFd = nFd;
+
     psMsg = NULL;
-    if (asprintf(&psMsg, "\nWaiting off the coast of %s...\n", pstDest->sName) < 0) {
+    if (asprintf(&psMsg, "\nConnected to %s.\n", pstDest->sName) < 0) {
         psMsg = NULL;
     }
     sayAndFree(psMsg);
 
     if (strcmp(sData, "WAIT") == 0) {
-        say("The harbor is full. We drop anchor and wait.\n>>> THE TIDE IS AGAINST US.\n");
+        psMsg = NULL;
+        if (asprintf(&psMsg, "Waiting off the coast of %s...\n", pstDest->sName) < 0) {
+            psMsg = NULL;
+        }
+        sayAndFree(psMsg);
+        say("The harbor is full. We drop anchor and wait.\n");
         if (!waitForDocking(pstShip, pstDest->sName)) {
             return -1;
         }
@@ -475,5 +481,143 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         say("Error: out of memory.\n");
         return -1;
     }
+    return 0;
+}
+
+static int addKnownIsland(tShip *pstShip, const char *psName, const char *psIp, int nPort) {
+    if (findKnownIsland(pstShip, psName) != NULL) {
+        return 0;
+    }
+
+    tKnownIsland *pstNew = realloc(pstShip->pstIslands, sizeof(tKnownIsland) * (pstShip->nNumIslands + 1));
+    if (pstNew == NULL) {
+        return -1;
+    }
+    pstShip->pstIslands = pstNew;
+
+    tKnownIsland *pstIsland = &pstShip->pstIslands[pstShip->nNumIslands];
+    pstIsland->sName = dupString(psName);
+    pstIsland->sIp = dupString(psIp);
+    pstIsland->nPort = nPort;
+    if (pstIsland->sName == NULL || pstIsland->sIp == NULL) {
+        free(pstIsland->sName);
+        free(pstIsland->sIp);
+        return -1;
+    }
+
+    pstShip->nNumIslands++;
+    return 0;
+}
+
+static int addKnownRoute(tShip *pstShip, const char *psA, const char *psB) {
+    if (isDirectRoute(pstShip, psA, psB)) {
+        return 0;
+    }
+
+    tKnownRoute *pstNew = realloc(pstShip->pstRoutes, sizeof(tKnownRoute) * (pstShip->nNumRoutes + 1));
+    if (pstNew == NULL) {
+        return -1;
+    }
+    pstShip->pstRoutes = pstNew;
+
+    tKnownRoute *pstRoute = &pstShip->pstRoutes[pstShip->nNumRoutes];
+    pstRoute->sA = dupString(psA);
+    pstRoute->sB = dupString(psB);
+    if (pstRoute->sA == NULL || pstRoute->sB == NULL) {
+        free(pstRoute->sA);
+        free(pstRoute->sB);
+        return -1;
+    }
+
+    pstShip->nNumRoutes++;
+    return 1;
+}
+
+int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    tFrame stFrame;
+    char sData[FRAME_DATA_SIZE + 1];
+    int nIndex = 0, nTotal = 1, nCharged = 0, nRoutes = 0;
+
+    if (nArgc != 1 || atoi(ppsArgv[0]) != 1) {
+        say("Error: only one map can be bought at a time (BUY MAP 1).\n");
+        return -1;
+    }
+    if (pstShip->nIslandFd < 0) {
+        say("Error: you are not docked at an island.\n");
+        return -1;
+    }
+    if (pstShip->nMoney < MAP_PRICE) {
+        say("Error: not enough gold.\n");
+        return -1;
+    }
+
+    if (sendFrame(pstShip->nIslandFd, TYPE_BUY_MAP, FLAG_REQUEST, "1", 1) != 0) {
+        say("Error: connection to the island lost.\n");
+        closeSocket(&pstShip->nIslandFd);
+        return -1;
+    }
+
+    while (nIndex < nTotal) {
+        if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
+            say("Error: connection to the island lost.\n");
+            closeSocket(&pstShip->nIslandFd);
+            return -1;
+        }
+        frameDataToString(&stFrame, sData, sizeof(sData));
+        if (stFrame.ucFlags != FLAGS_OK) {
+            sayError(sData);
+            return -1;
+        }
+
+        // OK&50&Index&Total&Name&IP&Port   (or OK&50&0 when there are no routes)
+        char *psOk = strtok(sData, "&");
+        char *psPrice = strtok(NULL, "&");
+        char *psIndex = strtok(NULL, "&");
+        char *psTotal = strtok(NULL, "&");
+        if (!psOk || !psPrice || !psIndex) {
+            say("Error: malformed reply from the island.\n");
+            return -1;
+        }
+
+        if (!nCharged) {                            // charge once, on the first OK frame
+            pstShip->nMoney -= atoi(psPrice);
+            nCharged = 1;
+        }
+        if (psTotal == NULL) {                      // "OK&50&0": the map has no routes
+            break;
+        }
+
+        char *psName = strtok(NULL, "&");
+        char *psIp = strtok(NULL, "&");
+        char *psPort = strtok(NULL, "&");
+        if (!psName || !psIp || !psPort) {
+            say("Error: malformed reply from the island.\n");
+            return -1;
+        }
+
+        nIndex = atoi(psIndex);
+        nTotal = atoi(psTotal);
+        if (nIndex <= 0 || nTotal <= 0) {
+            say("Error: malformed reply from the island.\n");
+            return -1;
+        }
+
+        if (addKnownIsland(pstShip, psName, psIp, atoi(psPort)) < 0) {
+            say("Error: out of memory.\n");
+            return -1;
+        }
+        int nAdded = addKnownRoute(pstShip, pstShip->psLocation, psName);
+        if (nAdded < 0) {
+            say("Error: out of memory.\n");
+            return -1;
+        }
+        nRoutes += nAdded; 
+    }
+
+    char *psMsg = NULL;
+    if (asprintf(&psMsg, "Bought the map of %s for %d gold.\n%s", pstShip->psLocation, MAP_PRICE, nRoutes > 0 ? "New routes have been charted.\n" : "") < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
     return 0;
 }

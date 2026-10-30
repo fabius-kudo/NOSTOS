@@ -41,6 +41,7 @@ typedef enum {
     CMD_MAP,
     CMD_LIST_MARKET,
     CMD_BUY,
+    CMD_BUY_MAP,
     CMD_SELL,
     CMD_STATUS,
     CMD_DELIVER,
