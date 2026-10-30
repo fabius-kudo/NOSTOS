@@ -117,7 +117,7 @@ tVoyage *parseVoyages(char *psVoyagesPath, int *pnNumVoyages) {
     // Second pass: parse each line into a Voyage
     psTok = strtok(psBuf, " \n"); 
     for (int i = 0; i < nCount; i++) {
-        pstVoyages[i].psOrigin      = dupString(psTok);
+        pstVoyages[i].psObject      = dupString(psTok);
         pstVoyages[i].psFile        = dupString(strtok(NULL, " \n"));
         pstVoyages[i].psDestination = dupString(strtok(NULL, " \n"));
         pstVoyages[i].nReward       = atoi(strtok(NULL, " \n"));
@@ -146,7 +146,7 @@ void freeVoyages(tVoyage *pstVoyages, int nNumVoyages) {
 
     if (NULL != pstVoyages) {
         for (i = 0; i < nNumVoyages; i++) {
-            free(pstVoyages[i].psOrigin);
+            free(pstVoyages[i].psObject);
             free(pstVoyages[i].psFile);
             free(pstVoyages[i].psDestination);
             free(pstVoyages[i].sOwner);

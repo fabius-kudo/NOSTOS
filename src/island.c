@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
     stIsland = parseIsland(argv[1]);
     pstStock = parseStock(argv[2], &nNumProducts);
 
-    printIsland(&stIsland);
+    //printIsland(&stIsland);
 
     if (filterRoutes(&stIsland) < 0) {
         write(STDERR_FILENO, "Error: invalid island configuration\n", strlen("Error: invalid island configuration\n"));

@@ -75,7 +75,7 @@ static void handleListVoyages(tClientSession *pstSession) {
     }
     for (int i = 0; i < nTotal; i++) {
         nLen = snprintf(sData, sizeof(sData), "%d&%d&%d&%s&%s&%d",
-                i + 1, nTotal, pstAvail[i].nId, pstAvail[i].psOrigin,
+                i + 1, nTotal, pstAvail[i].nId, pstAvail[i].psObject,
                 pstAvail[i].psDestination, pstAvail[i].nReward);
         if (nLen < 0 || nLen > FRAME_DATA_SIZE ||
             sendFrame(pstSession->nFd, TYPE_LIST_VOYAGES, FLAGS_OK, sData, nLen) < 0) {
@@ -135,7 +135,7 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
                 pstVoyage->eState = VOYAGE_ASSIGNED;
 
                 nLen = snprintf(sReply, sizeof(sReply), "OK&%d&%s&%s&%d",
-                                pstVoyage->nId, pstVoyage->psOrigin,
+                                pstVoyage->nId, pstVoyage->psObject,
                                 pstVoyage->psDestination, pstVoyage->nReward);
 
                 if (nLen < 0 || nLen > FRAME_DATA_SIZE) {      // undo
