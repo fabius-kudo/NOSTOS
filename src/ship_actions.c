@@ -192,7 +192,7 @@ int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         }
 
         char *psLine = NULL;
-        if (asprintf(&psLine, "%s. %-20s -> %-10s [%s]\n", psId, psObject, psDest, psReward) < 0) {
+        if (asprintf(&psLine, "%2s. %-22s -> %-10s [%s]\n", psId, psObject, psDest, psReward) < 0) {
             psLine = NULL;
         }
         sayAndFree(psLine);

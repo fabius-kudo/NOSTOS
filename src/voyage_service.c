@@ -17,6 +17,8 @@ static void logEvent(const char *psName, const char *psText) {
 }
 
 static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
+    char sName[FRAME_DATA_SIZE + 1]; 
+    
     if (pstFrame->ucDataLength == 0) {
         sendTextFrame(pstSession->nFd, TYPE_CONNECT_ITHACA, FLAGS_ERR, "EMPTY_NAME");
         return;                     // stay connected, let them retry
@@ -27,11 +29,16 @@ static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     }
 
     // frameDataToString always NUL-terminates and truncates to the buffer size
-    frameDataToString(pstFrame, pstSession->sName, sizeof(pstSession->sName));
+    frameDataToString(pstFrame, sName, sizeof(sName));      // local buffer, always NUL-terminated
+    pstSession->psName = dupString(sName);
+    if (pstSession->psName == NULL) {
+        sendTextFrame(pstSession->nFd, TYPE_CONNECT_ITHACA, FLAGS_ERR, "INTERNAL_ERROR");
+        return;
+    }
     pstSession->nIdentified = 1;
 
     sendTextFrame(pstSession->nFd, TYPE_CONNECT_ITHACA, FLAGS_OK, "OK");
-    logEvent(pstSession->sName, "connected to Ithaca.");
+    logEvent(pstSession->psName, "connected to Ithaca.");
 }
 
 static void handleDisconnect(tClientSession *pstSession) {
@@ -40,8 +47,9 @@ static void handleDisconnect(tClientSession *pstSession) {
         return;
     }
 
-    logEvent(pstSession->sName, "has left Ithaca. Fair winds!");
-    pstSession->sName[0] = '\0';
+    logEvent(pstSession->psName, "has left Ithaca. Fair winds!");
+    free(pstSession->psName);            // replaces: pstSession->sName[0] = '\0';
+    pstSession->psName = NULL;
     pstSession->nIdentified = 0;
 
     sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_OK, "OK");
@@ -84,7 +92,7 @@ static void handleListVoyages(tClientSession *pstSession) {
     }
     free(pstAvail);
 
-    logEvent(pstSession->sName, "requested available voyages.");
+    logEvent(pstSession->psName, "requested available voyages.");
 }
 
 static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
@@ -111,7 +119,7 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
         tVoyage *pstV = &pstStore->pstVoyages[i];
 
         if (pstV->eState == VOYAGE_ASSIGNED && pstV->sOwner != NULL &&
-            strcmp(pstV->sOwner, pstSession->sName) == 0) {
+            strcmp(pstV->sOwner, pstSession->psName) == 0) {
             psError = "ALREADY_HAVE_VOYAGE";
             break;
         }
@@ -126,7 +134,7 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
         } else if (pstVoyage->eState != VOYAGE_AVAILABLE) {
             psError = "VOYAGE_NOT_AVAILABLE";
         } else {
-            char *psOwner = dupString(pstSession->sName);
+            char *psOwner = dupString(pstSession->psName);
             if (psOwner == NULL) {
                 psError = "INTERNAL_ERROR";
             } else {
@@ -158,7 +166,7 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     sendFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_OK, sReply, nLen);
 
     char *psLog = NULL;
-    int nLogLen = asprintf(&psLog, ">>> Voyage %d assigned to %s.\n", nId, pstSession->sName);
+    int nLogLen = asprintf(&psLog, ">>> Voyage %d assigned to %s.\n", nId, pstSession->psName);
     if (nLogLen >= 0) {
         write(STDOUT_FILENO, psLog, nLogLen);
         free(psLog);
