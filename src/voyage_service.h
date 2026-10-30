@@ -13,7 +13,7 @@ typedef struct {
 
 typedef struct {
     int nFd;
-    char sName[100];
+    char *sName;
     int nIdentified;
     tVoyageStore *pstStore;
 } tClientSession;
