@@ -107,12 +107,14 @@ static void handleBuyMap(tIslandSession *pstSession, const tFrame *pstFrame) {
     }
     for (int i = 0; i < nTotal; i++) {
         nLen = snprintf(sReply, sizeof(sReply), "OK&50&%d&%d&%s&%s&%d", i + 1, nTotal,
-                        pstIsland->pstRoutes[i].psName, pstIsland->pstRoutes[i].psIp,
+                        pstIsland->pstRoutes[i].psName, pstIsland->pstRoutes[i].psIpAddress,
                         pstIsland->pstRoutes[i].nPort);
         if (nLen < 0 || nLen > FRAME_DATA_SIZE || sendFrame(pstSession->nFd, TYPE_BUY_MAP, FLAGS_OK, sReply, nLen) < 0) {
             return;
         }
     }
+}
+
 static void handleListMarket(tIslandSession *pstSession) {
     char sData[FRAME_DATA_SIZE + 1];
     tProduct *pstList;
