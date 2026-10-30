@@ -11,21 +11,6 @@
 
 /***********************************************
  *
- * @Name: cmdDef
- * @Def: Default dummy command handler function.
- * @Arg: In: argc count of command arguments
- *       In: argv array of argument strings
- * @Ret: Returns 0.
- *
- ***********************************************/
-static int cmd_def(int argc, char *argv[]){
-    (void) argc;
-    (void) argv;
-    return 0;
-}
-
-/***********************************************
- *
  * @Name: isNumeric
  * @Def: Checks if a given string contains only numeric digits.
  * @Arg: In: psStr string to validate
@@ -104,10 +89,10 @@ static void executeCommand(tShip *pstShip, tCmdId id, int nArgc, char *ppsArgs[]
         case CMD_ACCEPT: cmdAcceptVoyage(pstShip, nArgc, ppsArgs); break;
         case CMD_SAIL: cmdSail(pstShip, nArgc, ppsArgs); break;
         case CMD_MAP:
-        case CMD_LIST_MARKET:
-        case CMD_BUY:
         case CMD_BUY_MAP: cmdBuyMap(pstShip, nArgc, ppsArgs); break;
-        case CMD_SELL:
+        case CMD_LIST_MARKET: cmdListMarket(pstShip, nArgc, ppsArgs); break;
+        case CMD_BUY: cmdBuy(pstShip, nArgc, ppsArgs); break;
+        case CMD_SELL: cmdSell(pstShip, nArgc, ppsArgs); break;
         case CMD_STATUS:
         case CMD_DELIVER:
         case CMD_CLAIM:

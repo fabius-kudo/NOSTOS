@@ -17,6 +17,9 @@ int cmdListVoyages(tShip *pContext, int nArgc, char *ppsArgv[]);
 int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]);
+int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]);
+int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]);
+int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]);
 
 void releaseShip(tShip *pstShip);
 
