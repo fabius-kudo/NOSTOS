@@ -85,7 +85,10 @@ int main(int argc, char *argv[]) {
     //####### 'server' setup
     nServerFd = createServerSocket(stIsland.psIpAddress, stIsland.nPort);
     if (nServerFd < 0) {
-        write(STDERR_FILENO, "Error: Failed to create server socket\n", strlen("Error: Failed to create server socket\n"));
+        char *err;
+        int len = asprintf(&err, "Error: Failed to create server socket on %s:%d (%s)\n",
+                 stIsland.psIpAddress, stIsland.nPort, strerror(errno));
+        write(STDOUT_FILENO, err, len);
         portDestroy(&stPort);
         freeIsland(stIsland);
         free(pstStock);

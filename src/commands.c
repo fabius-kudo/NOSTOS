@@ -89,6 +89,7 @@ static void executeCommand(tShip *pstShip, tCmdId id, int nArgc, char *ppsArgs[]
         case CMD_ACCEPT: cmdAcceptVoyage(pstShip, nArgc, ppsArgs); break;
         case CMD_SAIL: cmdSail(pstShip, nArgc, ppsArgs); break;
         case CMD_MAP:
+        case CMD_BUY_MAP: cmdBuyMap(pstShip, nArgc, ppsArgs); break;
         case CMD_LIST_MARKET: cmdListMarket(pstShip, nArgc, ppsArgs); break;
         case CMD_BUY: cmdBuy(pstShip, nArgc, ppsArgs); break;
         case CMD_SELL: cmdSell(pstShip, nArgc, ppsArgs); break;
@@ -118,6 +119,7 @@ void processLine(tShip *pstShip, char *ppsTokens[], int nTokenCount) {
         { "MAP", NULL, 0, { 0 }, "Usage: MAP\n", CMD_MAP },
         { "LIST", "MARKET", 0, { 0 }, "Usage: LIST MARKET\n", CMD_LIST_MARKET },
         { "BUY", NULL, 2, { ARG_TEXT, ARG_NUMERIC }, "Usage: BUY <product> <amount>\n", CMD_BUY },
+        { "BUY", "MAP", 1, { ARG_NUMERIC }, "Usage: BUY MAP 1\n", CMD_BUY_MAP },
         { "SELL", NULL, 2, { ARG_TEXT, ARG_NUMERIC }, "Usage: SELL <product> <amount>\n", CMD_SELL },
         { "STATUS", NULL, 0, { 0 }, "Usage: STATUS\n", CMD_STATUS },
         { "DELIVER", NULL, 0, { 0 }, "Usage: DELIVER\n", CMD_DELIVER },

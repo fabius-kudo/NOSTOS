@@ -87,6 +87,32 @@ static int handleLeave(tIslandSession *pstSession) {
     return -1;
 }
 
+static void handleBuyMap(tIslandSession *pstSession, const tFrame *pstFrame) {
+    char sData[FRAME_DATA_SIZE + 1];
+    char sReply[FRAME_DATA_SIZE + 1];
+    int nLen;
+
+    frameDataToString(pstFrame, sData, sizeof(sData));
+    if (strcmp(sData, "1") != 0) {
+        sendTextFrame(pstSession->nFd, TYPE_BUY_MAP, FLAGS_ERR, "INVALID_AMOUNT");
+        return;
+    }
+
+    tIsland *pstIsland = pstSession->pstIsland;
+    int nTotal = pstIsland->nNumRoutes;
+
+    if (nTotal == 0) {
+        sendTextFrame(pstSession->nFd, TYPE_BUY_MAP, FLAGS_OK, "OK&50&0");
+        return;
+    }
+    for (int i = 0; i < nTotal; i++) {
+        nLen = snprintf(sReply, sizeof(sReply), "OK&50&%d&%d&%s&%s&%d", i + 1, nTotal,
+                        pstIsland->pstRoutes[i].psName, pstIsland->pstRoutes[i].psIp,
+                        pstIsland->pstRoutes[i].nPort);
+        if (nLen < 0 || nLen > FRAME_DATA_SIZE || sendFrame(pstSession->nFd, TYPE_BUY_MAP, FLAGS_OK, sReply, nLen) < 0) {
+            return;
+        }
+    }
 static void handleListMarket(tIslandSession *pstSession) {
     char sData[FRAME_DATA_SIZE + 1];
     tProduct *pstList;
@@ -211,6 +237,9 @@ void serveShip(tIslandSession *pstSession) {
                 break;
             case TYPE_ISLAND_LEAVE:
                 nEnd = (handleLeave(pstSession) < 0);
+                break;
+            case TYPE_BUY_MAP:
+                handleBuyMap(pstSession, &stFrame);
                 break;
             case TYPE_LIST_MARKET:
                 handleListMarket(pstSession);
