@@ -22,6 +22,7 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]);
+int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]);
 
 void releaseShip(tShip *pstShip);
 

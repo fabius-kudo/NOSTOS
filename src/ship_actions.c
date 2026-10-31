@@ -1014,3 +1014,65 @@ int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     free(pstMap);
     return nOk ? 0 : -1;
 }
+
+void cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+    (void)ppsArgv;
+    char *psMsg = NULL;
+    int nTotal = 0;
+
+    tOdysseus tOdysseus = pstShip->stConfig;
+
+    // ship name in uppercase
+    char *psUpper = dupString(tOdysseus.psName);
+    if (psUpper != NULL) {
+        for (int i = 0; psUpper[i] != '\0'; i++) {
+            psUpper[i] = (char)toupper((unsigned char)psUpper[i]);
+        }
+    }
+
+    if (asprintf(&psMsg, "--- %s ---\nGold: %d\n", psUpper ? psUpper : tOdysseus.psName, pstShip->nMoney) < 0) {
+        psMsg = NULL;
+    }
+    free(psUpper);
+    sayAndFree(psMsg);
+
+
+    say("\nCargo:\n");
+    for (int i = 0; i < tOdysseus.nNumFoodItems; i++) {
+        tFood *pstFood = &tOdysseus.pstFoodSupplies[i];
+        psMsg = NULL;
+        if (asprintf(&psMsg, "%s: %d kg\n", pstFood->psProduct, pstFood->nQuantity) < 0) {
+            psMsg = NULL;
+        }
+        sayAndFree(psMsg);
+        nTotal += pstFood->nQuantity;
+    } 
+
+    psMsg = NULL;
+    if (asprintf(&psMsg, "\nTotal provisions: %d kg\n\n", nTotal) < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
+
+    tActiveVoyage tVoyage = pstShip->stVoyage;
+
+    psMsg = NULL;
+    if (pstShip->nHasVoyage) {
+        if (asprintf(&psMsg, "Current voyage: %s -> %s\nReward: %d\n", tVoyage.psObject, tVoyage.psDestination, tVoyage.nReward) < 0) {
+            psMsg = NULL;
+        }
+        sayAndFree(psMsg);
+    } else {
+        say("\nCurrent voyage: None\nReward: None\n");
+    }
+
+    psMsg = NULL;
+    if (asprintf(&psMsg, "\nCurrent location: %s\n",
+                 pstShip->psLocation ? pstShip->psLocation : "None") < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
+    return 0;
+
+}
