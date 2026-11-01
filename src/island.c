@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
     struct sigaction stAct;
 
     if (argc != 3) {
-        write(STDERR_FILENO, "Usage: ./island <config.dat> <stock.dat>\n", strlen("Usage: ./island <config.dat> <stock.dat>\n"));
+        write(STDERR_FILENO, "Usage: ./island <config.dat> <stock.db>\n", strlen("Usage: ./island <config.dat> <stock.db>\n"));
         exit(EXIT_FAILURE);
     }
 
@@ -95,7 +95,11 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    nLen = asprintf(&psBuf, "%s is open. Docks: %d.\nWaiting for ships...\n", stIsland.psName, stIsland.nMaxCapacity);
+    nLen = asprintf(&psBuf, "Island %s initialized.\nPort capacity: %d %s.\n%d sea routes loaded.\n%d products available.\n\n",
+                stIsland.psName,
+                stIsland.nMaxCapacity, stIsland.nMaxCapacity == 1 ? "ship" : "ships",
+                stIsland.nNumRoutes,
+                nNumProducts);
     if (nLen >= 0) {
         write(STDOUT_FILENO, psBuf, nLen);
         free(psBuf);

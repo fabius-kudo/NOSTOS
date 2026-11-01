@@ -66,12 +66,18 @@ int main(int argc, char *argv[]) {
 
     if (initShip(&stShip, stShip.stConfig) < 0) {
         releaseShip(&stShip);
-        write(STDERR_FILENO, "Error: out of memory\n", 21);
+        write(STDERR_FILENO, "Error: out of memory\n", strlen("Error: out of memory\n"));
         return EXIT_FAILURE;
     }
 
-    while (!gnStop) {
-        write(STDOUT_FILENO, "$ ", 2);
+    char *psMsg = NULL;
+    if (asprintf(&psMsg, "Odysseus %s is ready to sail.\n", stShip.stConfig.psName) >= 0) {
+        write(STDOUT_FILENO, psMsg, strlen(psMsg));
+        free(psMsg);
+    }
+
+    while (!gnStop && !stShip.nShouldExit) {
+        write(STDOUT_FILENO, "\n$ ", strlen("\n$ "));
         psLine = readDynamic(STDIN_FILENO, 1);
         if (psLine == NULL) break;
         nTokenCount = tokenizeLine(psLine, apsTokens, MAX_ARGS);
@@ -79,7 +85,7 @@ int main(int argc, char *argv[]) {
         free(psLine);
     }
 
-    write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", 29);
+    write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", strlen("\nOdysseus stops his journey.\n"));
 
     releaseShip(&stShip);
     if (stShip.nIthacaFd >= 0) close(stShip.nIthacaFd);
@@ -90,5 +96,6 @@ int main(int argc, char *argv[]) {
         signal(SIGINT, SIG_DFL);
         raise(SIGINT);
     }
+    releaseShip(&stShip);
     return 0;
 }

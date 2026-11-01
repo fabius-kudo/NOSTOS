@@ -72,7 +72,8 @@ typedef struct {
     tKnownIsland *pstIslands;   
     int nNumIslands;   // starts with Aeaea from the config
     tKnownRoute *pstRoutes;     
-    int nNumRoutes;    // starts empty
+    int nNumRoutes;
+    int nShouldExit;
 } tShip;
 
 tOdysseus parseOdysseus(char *psConfigPath);

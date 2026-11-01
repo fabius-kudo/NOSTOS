@@ -38,7 +38,11 @@ static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     pstSession->nIdentified = 1;
 
     sendTextFrame(pstSession->nFd, TYPE_CONNECT_ITHACA, FLAGS_OK, "OK");
-    logEvent(pstSession->psName, "connected to Ithaca.");
+    char *psLog = NULL;
+    if (asprintf(&psLog, "\n>>> %s connected to Ithaca.\n", pstSession->psName) >= 0) {
+        write(STDOUT_FILENO, psLog, strlen(psLog));
+        free(psLog);
+    }
 }
 
 static void handleDisconnect(tClientSession *pstSession) {
@@ -69,9 +73,13 @@ static void handleListVoyages(tClientSession *pstSession) {
     }
 
     // Copy the available voyages under the lock, send them after releasing it.
-    // The copies are shallow: they share the store's strings, which are not freed while running.
     pthread_mutex_lock(&pstStore->stMutex);
     for (int i = 0; i < pstStore->nNumVoyages; i++) {
+        tVoyage *pstV = &pstStore->pstVoyages[i];
+        // A restarted ship that still owns a voyage lost it at sea is marked as failed
+        if (pstV->eState == VOYAGE_ASSIGNED && pstV->sOwner != NULL && strcmp(pstV->sOwner, pstSession->psName) == 0) {
+            pstV->eState = VOYAGE_FAILED;
+        }
         if (pstStore->pstVoyages[i].eState == VOYAGE_AVAILABLE) {
             pstAvail[nTotal++] = pstStore->pstVoyages[i];
         }

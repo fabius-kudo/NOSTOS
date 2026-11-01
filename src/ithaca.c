@@ -90,11 +90,6 @@ int main(int argc, char *argv[]) {
     stStore.nNumVoyages = nNumVoyages;
     pthread_mutex_init(&stStore.stMutex, NULL);
 
-    //test TODO: remove
-    nLen = asprintf(&psBuf, "%s %s %s %d\n\n", stIthaca.psServerName, stIthaca.psPath, stIthaca.psIpAddress, stIthaca.nPort);
-    write(STDOUT_FILENO, psBuf, nLen);
-    free(psBuf);
-
     // ############# SERVER INIT #########
 
     int nServerFd = createServerSocket(stIthaca.psIpAddress, stIthaca.nPort);
@@ -107,7 +102,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    nLen = asprintf(&psBuf, "Ithaca initialized. %d voyages loaded.\nWaiting for Odysseus...\n", nNumVoyages);
+    nLen = asprintf(&psBuf, "Ithaca initialized. %d voyages loaded.\nWaiting for Odysseus...\n\n", nNumVoyages);
     if (nLen < 0) {
         write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
         closeSocket(&nServerFd);
