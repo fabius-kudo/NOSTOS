@@ -17,7 +17,7 @@
  * @Ret: 
  *
  ***********************************************/
-static void printAndFree(char *psMsg) {
+void printAndFree(char *psMsg) {
     if (psMsg != NULL) {
         write(STDOUT_FILENO, psMsg, strlen(psMsg));
         free(psMsg);
