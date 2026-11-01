@@ -10,20 +10,10 @@
 
 #define MAP_PRICE 50
 
-// One write per line so threads don't interleave output.
-static void logEvent(const char *psFormat, const char *psA, const char *psB) {
-    char *psLog = NULL;
-    int nLen = asprintf(&psLog, psFormat, psA, psB);
-
-    if (nLen >= 0) {
-        write(STDOUT_FILENO, psLog, nLen);
-        free(psLog);
-    }
-}
-
 // Returns 0 to keep serving, -1 to end the session.
 static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
     char sName[FRAME_DATA_SIZE + 1];
+    char *psMsg = NULL;
 
     if (pstSession->eState != SHIP_NONE) {
         sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_ERR, "ALREADY_ARRIVED");
@@ -40,28 +30,37 @@ static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
         return -1;
     }
 
-    logEvent(">>> %s approaching %s.\n", pstSession->psShipName, pstSession->psIslandName);
+    if (asprintf(&psMsg, ">>> %s approaching %s.\n", pstSession->psShipName, pstSession->psIslandName) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
 
     if (portArrive(pstSession->pstPort)) {
         pstSession->eState = SHIP_DOCKED;
         if (sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "DOCKED") != 0) {
             return -1;                  // serveShip releases the dock
         }
-        logEvent(">>> %s entered the port.\n", pstSession->psShipName, NULL);
+        if (asprintf(&psMsg, ">>> %s entered the port.\n", pstSession->psShipName) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
         return 0;
     }
 
-    // Port full: tell the ship to wait, then block until our ticket comes up
+    // Port full: tell the ship to wait, then block until our turn comes up
     pstSession->eState = SHIP_QUEUED;
     if (sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "WAIT") != 0) {
-        // The ticket is already taken and must be consumed, or the queue stalls
+        // The place in the queue is already taken and must be consumed, or the queue stalls
         if (portWaitTurn(pstSession->pstPort) == 0) {
             portLeave(pstSession->pstPort);
         }
         pstSession->eState = SHIP_GONE;
         return -1;
     }
-    logEvent(">>> Port full. %s waiting offshore in the FIFO queue.\n", pstSession->psShipName, NULL);
+    if (asprintf(&psMsg, ">>> Port full. %s waiting offshore in the FIFO queue.\n", pstSession->psShipName) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
 
     if (portWaitTurn(pstSession->pstPort) != 0) {
         pstSession->eState = SHIP_GONE; // port closing
@@ -73,11 +72,16 @@ static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
         return -1;
     }
     pstSession->eState = SHIP_DOCKED;
-    logEvent(">>> DOCKED sent to %s; he may enter the port.\n", pstSession->psShipName, NULL);
+    if (asprintf(&psMsg, ">>> DOCKED sent to %s; he may enter the port.\n", pstSession->psShipName) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
     return 0;
 }
 
 static int handleLeave(tIslandSession *pstSession) {
+    char *psMsg = NULL;
+
     if (pstSession->eState != SHIP_DOCKED) {
         sendTextFrame(pstSession->nFd, TYPE_ISLAND_LEAVE, FLAGS_ERR, "NOT_DOCKED");
         return 0;
@@ -85,13 +89,17 @@ static int handleLeave(tIslandSession *pstSession) {
     portLeave(pstSession->pstPort);
     pstSession->eState = SHIP_GONE;
     sendTextFrame(pstSession->nFd, TYPE_ISLAND_LEAVE, FLAGS_OK, "OK");
-    logEvent(">>> %s has left.\n", pstSession->psShipName, NULL);
+    if (asprintf(&psMsg, ">>> %s has left.\n", pstSession->psShipName) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
     return -1;
 }
 
 static void handleBuyMap(tIslandSession *pstSession, const tFrame *pstFrame) {
     char sData[FRAME_DATA_SIZE + 1];
     char sReply[FRAME_DATA_SIZE + 1];
+    char *psMsg = NULL;
     int nLen;
 
     frameDataToString(pstFrame, sData, sizeof(sData));
@@ -105,7 +113,10 @@ static void handleBuyMap(tIslandSession *pstSession, const tFrame *pstFrame) {
 
     if (nTotal == 0) {
         sendTextFrame(pstSession->nFd, TYPE_BUY_MAP, FLAGS_OK, "OK&50&0");
-        logEvent(">>> %s bought the local map.\n", pstSession->psShipName, NULL);
+        if (asprintf(&psMsg, ">>> %s bought the local map.\n", pstSession->psShipName) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
         return;
     }
     for (int i = 0; i < nTotal; i++) {
@@ -175,22 +186,13 @@ static int parseTrade(const tFrame *pstFrame, char *psData, int nSize, char **pp
     return 0;
 }
 
-static void logTrade(const char *psShip, const char *psVerb, int nAmount, const char *psProduct) {
-    char *psLog = NULL;
-    int nLen = asprintf(&psLog, ">>> %s %s %d kg of %s.\n", psShip, psVerb, nAmount, psProduct);
-
-    if (nLen >= 0) {
-        write(STDOUT_FILENO, psLog, nLen);
-        free(psLog);
-    }
-}
-
 static void handleTrade(tIslandSession *pstSession, const tFrame *pstFrame, int nIsBuy) {
     unsigned char ucType = nIsBuy ? TYPE_BUY : TYPE_SELL;
     char sData[FRAME_DATA_SIZE + 1];
     char sReply[FRAME_DATA_SIZE + 1];
     char sCanonical[MAX_NAME];
     char *psProduct = NULL;
+    char *psMsg = NULL;
     int nAmount = 0;
     int nMoney = 0;
     int nLen;
@@ -221,11 +223,17 @@ static void handleTrade(tIslandSession *pstSession, const tFrame *pstFrame, int 
         return;
     }
     sendFrame(pstSession->nFd, ucType, FLAGS_OK, sReply, nLen);
-    logTrade(pstSession->psShipName, nIsBuy ? "bought" : "sold", nAmount, sCanonical);
+
+    if (asprintf(&psMsg, ">>> %s %s %d kg of %s.\n", pstSession->psShipName,
+                 nIsBuy ? "bought" : "sold", nAmount, sCanonical) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
 }
 
 void serveShip(tIslandSession *pstSession) {
     tFrame stFrame;
+    char *psMsg = NULL;
     int nEnd = 0;
 
     while (!nEnd) {
@@ -265,7 +273,10 @@ void serveShip(tIslandSession *pstSession) {
     if (pstSession->eState == SHIP_DOCKED) {
         portLeave(pstSession->pstPort);
         pstSession->eState = SHIP_GONE;
-        logEvent(">>> %s has left.\n", pstSession->psShipName, NULL);
+        if (asprintf(&psMsg, ">>> %s has left.\n", pstSession->psShipName) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
     }
     free(pstSession->psShipName);
     pstSession->psShipName = NULL;

@@ -134,7 +134,7 @@ void processLine(tShip *pstShip, char *ppsTokens[], int nTokenCount) {
     int nNameWords = 0;
     const tCommand *pstCmd = findCommand(astCommands, nNumCmds, ppsTokens, nTokenCount, &nNameWords);
     if (pstCmd == NULL) {
-        write(STDOUT_FILENO, "Unknown command\n", strlen("Unknown command\n"));
+        printF("Unknown command\n");
         return;
     }
 
@@ -142,12 +142,12 @@ void processLine(tShip *pstShip, char *ppsTokens[], int nTokenCount) {
     int nGivenArgs = nTokenCount - nNameWords;
 
     if (nGivenArgs != pstCmd->nNumArgs) {
-        write(STDOUT_FILENO, pstCmd->psUsage, strlen(pstCmd->psUsage));
+        printF(pstCmd->psUsage);
         return;
     }
     for (int i = 0; i < nGivenArgs; i++) {
         if (pstCmd->aArgKinds[i] == ARG_NUMERIC && !isNumeric(ppsArgs[i])) {
-            write(STDOUT_FILENO, pstCmd->psUsage, strlen(pstCmd->psUsage));
+            printF(pstCmd->psUsage);
             return;
         }
     }
