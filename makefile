@@ -62,8 +62,8 @@ build/island.o: src/island.c src/port_config.h src/island/port_control.h src/isl
 	gcc $(CFLAGS) -c src/island.c -o build/island.o
 
 # ---------- executables ----------
-odysseus: build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_dynamic.o
-	gcc build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_dynamic.o $(CFLAGS) -o build/odysseus -lpthread
+odysseus: build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_dynamic.o $(SPHRAGIS)/sphragis.o
+	gcc build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_dynamic.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o build/odysseus -lpthread
 
 island: build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_dynamic.o $(SPHRAGIS)/sphragis.o
 	gcc build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_dynamic.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o build/island -lpthread

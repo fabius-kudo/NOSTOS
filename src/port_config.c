@@ -155,7 +155,6 @@ tProduct *parseStock(char *stock_path, int *num_products) {
  ***********************************************/
 int filterRoutes(tIsland *pstIsland) {
     int nRes = 0;
-    int nK = 0;
     SPHRAGIS_Island stTmp;
     
     stTmp.name = pstIsland->psName;

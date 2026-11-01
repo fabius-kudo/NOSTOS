@@ -943,3 +943,137 @@ int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     sayAndFree(psMsg);
     return 0;
 }
+
+int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+    (void)ppsArgv;
+
+    int nCount = pstShip->nNumIslands;
+    int nOk = 1;
+    SPHRAGIS_Island *pstMap = calloc(nCount, sizeof(SPHRAGIS_Island));
+
+    if (pstMap == NULL) {
+        say("Error: out of memory.\n");
+        return -1;
+    }
+
+    // Build one SPHRAGIS entry per island
+    for (int i = 0; i < nCount && nOk; i++) {
+        char *psName = pstShip->pstIslands[i].sName;
+        int nNeighbours = 0;
+
+        //Count island's neighbours, to knowhow big the array of names must be. 
+        //A route touches this island if the island is the origin or destination.
+        for (int r = 0; r < pstShip->nNumRoutes; r++) {
+            if (strcasecmp(pstShip->pstRoutes[r].sA, psName) == 0 || strcasecmp(pstShip->pstRoutes[r].sB, psName) == 0) {
+                nNeighbours++;
+            }
+        }
+
+        pstMap[i].name = psName;
+        pstMap[i].known_island_count = nNeighbours;
+        if (nNeighbours == 0) {
+            continue;
+        }
+
+        //Array of pointers to the neighbour names
+        pstMap[i].known_islands = malloc(sizeof(char *) * nNeighbours);
+        if (pstMap[i].known_islands == NULL) {
+            nOk = 0;
+            break;
+        }
+
+        int k = 0;
+        for (int r = 0; r < pstShip->nNumRoutes; r++) {
+            if (strcasecmp(pstShip->pstRoutes[r].sA, psName) == 0) {
+                pstMap[i].known_islands[k++] = pstShip->pstRoutes[r].sB;   // this island is A, so the neighbour is B
+            } else if (strcasecmp(pstShip->pstRoutes[r].sB, psName) == 0) {
+                pstMap[i].known_islands[k++] = pstShip->pstRoutes[r].sA;   // this island is B, so the neighbour is A
+            }
+        }
+    }
+
+    if (!nOk) {
+        say("Error: out of memory.\n");
+    } else {
+        // Let SPHRAGIS draw the map, and turn its error codes into messages
+        int nRet = SPHRAGIS_display_map(pstMap, nCount);
+        if (nRet == SPHRAGIS_ERROR) {
+            say("Error: the terminal needs at least 80 columns to draw the map.\n");
+        } else if (nRet == SPHRAGIS_ERROR_INVALID_ISLAND) {
+            say("Error: the map contains an invalid or duplicated island.\n");
+        } else if (nRet == SPHRAGIS_ERROR_INVALID_CONNECTION) {
+            say("Error: the map contains an invalid route.\n");
+        }
+        nOk = (nRet == SPHRAGIS_OK);
+    }
+
+    //Free what was allocated: arrays of pointers and top-level array. 
+    //Name strings belong to the ship so no free here.
+    for (int i = 0; i < nCount; i++) {
+        free(pstMap[i].known_islands);
+    }
+    free(pstMap);
+    return nOk ? 0 : -1;
+}
+
+int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+    (void)ppsArgv;
+    char *psMsg = NULL;
+    int nTotal = 0;
+
+    tOdysseus tOdysseus = pstShip->stConfig;
+
+    // ship name in uppercase
+    char *psUpper = dupString(tOdysseus.psName);
+    if (psUpper != NULL) {
+        for (int i = 0; psUpper[i] != '\0'; i++) {
+            psUpper[i] = (char)toupper((unsigned char)psUpper[i]);
+        }
+    }
+
+    if (asprintf(&psMsg, "--- %s ---\nGold: %d\n", psUpper ? psUpper : tOdysseus.psName, pstShip->nMoney) < 0) {
+        psMsg = NULL;
+    }
+    free(psUpper);
+    sayAndFree(psMsg);
+
+
+    say("\nCargo:\n");
+    for (int i = 0; i < tOdysseus.nNumFoodItems; i++) {
+        tFood *pstFood = &tOdysseus.pstFoodSupplies[i];
+        psMsg = NULL;
+        if (asprintf(&psMsg, "%s: %d kg\n", pstFood->psProduct, pstFood->nQuantity) < 0) {
+            psMsg = NULL;
+        }
+        sayAndFree(psMsg);
+        nTotal += pstFood->nQuantity;
+    } 
+
+    psMsg = NULL;
+    if (asprintf(&psMsg, "\nTotal provisions: %d kg\n\n", nTotal) < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
+
+    tActiveVoyage tVoyage = pstShip->stVoyage;
+
+    psMsg = NULL;
+    if (pstShip->nHasVoyage) {
+        if (asprintf(&psMsg, "Current voyage: %s -> %s\nReward: %d\n", tVoyage.psObject, tVoyage.psDestination, tVoyage.nReward) < 0) {
+            psMsg = NULL;
+        }
+        sayAndFree(psMsg);
+    } else {
+        say("\nCurrent voyage: None\nReward: None\n");
+    }
+
+    psMsg = NULL;
+    if (asprintf(&psMsg, "\nCurrent location: %s\n",
+                 pstShip->psLocation ? pstShip->psLocation : "None") < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
+    return 0;
+}
