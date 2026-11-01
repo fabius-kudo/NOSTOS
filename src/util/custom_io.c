@@ -1,13 +1,13 @@
 /***********************************************
  *
- * @File : custom_dynamic.c
- * @Purpose : Dynamic memory management functions
+ * @File : custom_io.c
+ * @Purpose : I/O functions for handling dynamic strings
  * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
  * @Date : 3/10/26
  *
  ***********************************************/
 
-#include "custom_dynamic.h"
+#include "custom_io.h"
 
 /***********************************************
  *
