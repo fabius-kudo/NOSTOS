@@ -1,5 +1,5 @@
 #include <errno.h>
-#include "semaphore_v2.h"       // only included here: it defines functions in the header
+#include "semaphore_v2.h"
 #include "port_control.h"
 
 static int waitSem(tPort *pstPort) {

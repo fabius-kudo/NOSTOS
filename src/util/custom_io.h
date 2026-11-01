@@ -15,6 +15,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define printF(x) write(STDOUT_FILENO, x, strlen(x))
+#define printE(x) write(STDERR_FILENO, x, strlen(x))
+
 char *readDynamic(int nFd, int nUntilNewline);   // reads until '\n' or EOF
 char *dupString(const char *psSource);  // heap copy of a string
 
