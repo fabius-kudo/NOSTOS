@@ -20,6 +20,7 @@
 //prj includes
 #include "ship_actions.h"
 #include "ship_config.h"
+#include "custom_io.h"
 
 // Constant Declarations
 #define MAX_ARGS 4

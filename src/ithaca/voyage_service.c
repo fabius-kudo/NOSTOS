@@ -4,21 +4,12 @@
 #include <string.h>
 #include <unistd.h>
 #include "voyage_service.h"
-
-// Prints ">>> <name> <text>\n" in a single write so threads don't interleave lines.
-static void logEvent(const char *psName, const char *psText) {
-    char *psLog = NULL;
-    int nLen = asprintf(&psLog, ">>> %s %s\n", psName, psText);
-
-    if (nLen >= 0) {
-        write(STDOUT_FILENO, psLog, nLen);
-        free(psLog);
-    }
-}
+#include "custom_io.h"
 
 static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
-    char sName[FRAME_DATA_SIZE + 1]; 
-    
+    char sName[FRAME_DATA_SIZE + 1];
+    char *psMsg = NULL;
+
     if (pstFrame->ucDataLength == 0) {
         sendTextFrame(pstSession->nFd, TYPE_CONNECT_ITHACA, FLAGS_ERR, "EMPTY_NAME");
         return;                     // stay connected, let them retry
@@ -38,21 +29,25 @@ static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     pstSession->nIdentified = 1;
 
     sendTextFrame(pstSession->nFd, TYPE_CONNECT_ITHACA, FLAGS_OK, "OK");
-    char *psLog = NULL;
-    if (asprintf(&psLog, "\n>>> %s connected to Ithaca.\n", pstSession->psName) >= 0) {
-        write(STDOUT_FILENO, psLog, strlen(psLog));
-        free(psLog);
+    if (asprintf(&psMsg, "\n>>> %s connected to Ithaca.\n", pstSession->psName) < 0) {
+        psMsg = NULL;
     }
+    printAndFree(psMsg);
 }
 
 static void handleDisconnect(tClientSession *pstSession) {
+    char *psMsg = NULL;
+
     if (!pstSession->nIdentified) {
         sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_ERR, "NOT_CONNECTED");
         return;
     }
 
-    logEvent(pstSession->psName, "has left Ithaca. Fair winds!");
-    free(pstSession->psName);            // replaces: pstSession->sName[0] = '\0';
+    if (asprintf(&psMsg, ">>> %s has left Ithaca. Fair winds!\n", pstSession->psName) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+    free(pstSession->psName);
     pstSession->psName = NULL;
     pstSession->nIdentified = 0;
 
@@ -63,6 +58,7 @@ static void handleListVoyages(tClientSession *pstSession) {
     tVoyageStore *pstStore = pstSession->pstStore;
     tVoyage *pstAvail;
     char sData[FRAME_DATA_SIZE + 1];
+    char *psMsg = NULL;
     int nTotal = 0;
     int nLen;
 
@@ -100,13 +96,17 @@ static void handleListVoyages(tClientSession *pstSession) {
     }
     free(pstAvail);
 
-    logEvent(pstSession->psName, "requested available voyages.");
+    if (asprintf(&psMsg, ">>> %s requested available voyages.\n", pstSession->psName) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
 }
 
 static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     tVoyageStore *pstStore = pstSession->pstStore;
     char sData[FRAME_DATA_SIZE + 1];
     char sReply[FRAME_DATA_SIZE + 1];
+    char *psMsg = NULL;
     const char *psError = NULL;
     tVoyage *pstVoyage = NULL;
     int nId, nLen = 0;
@@ -173,12 +173,10 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
 
     sendFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_OK, sReply, nLen);
 
-    char *psLog = NULL;
-    int nLogLen = asprintf(&psLog, ">>> Voyage %d assigned to %s.\n", nId, pstSession->psName);
-    if (nLogLen >= 0) {
-        write(STDOUT_FILENO, psLog, nLogLen);
-        free(psLog);
+    if (asprintf(&psMsg, ">>> Voyage %d assigned to %s.\n", nId, pstSession->psName) < 0) {
+        psMsg = NULL;
     }
+    printAndFree(psMsg);
 }
 
 void serveClient(tClientSession *pstSession) {
