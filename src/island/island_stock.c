@@ -1,13 +1,23 @@
-// island_stock.c
+/***********************************************
+ *
+ * @File : island_stock.c
+ * @Purpose : Shared stock of an island (buying, selling and saving to stock.db)
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 31/10/26
+ *
+ ***********************************************/
+
 #define _GNU_SOURCE
-#include <stdlib.h>
-#include <string.h>
-#include <strings.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include "island_stock.h"
 
-// Rewrites the whole file. Caller must hold the mutex. Returns 0 or -1.
+/***********************************************
+ *
+ * @Name: saveStock
+ * @Def: Rewrites the whole stock file with the current products.
+ * @Arg: In: pstStock pointer to the stock (the caller must hold its mutex)
+ * @Ret: Returns 0 on success, -1 on error.
+ *
+ ***********************************************/
 static int saveStock(const tStock *pstStock) {
     size_t nBytes = sizeof(tProduct) * (size_t)pstStock->nNumProducts;
     int nFd = open(pstStock->psPath, O_WRONLY | O_TRUNC);
@@ -23,6 +33,15 @@ static int saveStock(const tStock *pstStock) {
     return nRet;
 }
 
+/***********************************************
+ *
+ * @Name: findProduct
+ * @Def: Looks for a product by name, ignoring upper/lower case.
+ * @Arg: In: pstStock pointer to the stock (the caller must hold its mutex)
+ *       In: psName name of the product
+ * @Ret: Returns a pointer to the product, or NULL if it is not found.
+ *
+ ***********************************************/
 static tProduct *findProduct(tStock *pstStock, const char *psName) {
     for (int i = 0; i < pstStock->nNumProducts; i++) {
         if (strcasecmp(pstStock->pstProducts[i].sName, psName) == 0) {
@@ -32,6 +51,17 @@ static tProduct *findProduct(tStock *pstStock, const char *psName) {
     return NULL;
 }
 
+/***********************************************
+ *
+ * @Name: stockInit
+ * @Def: Initializes the stock with the products read from the file.
+ * @Arg: Out: pstStock pointer to the stock to initialize
+ *       In: pstProducts array of products (the stock takes its ownership)
+ *       In: nNumProducts number of products in the array
+ *       In: psPath path of the stock file, used to save the changes
+ * @Ret: Returns 0 on success, -1 on error.
+ *
+ ***********************************************/
 int stockInit(tStock *pstStock, tProduct *pstProducts, int nNumProducts, const char *psPath) {
     pstStock->psPath = dupString(psPath);
     if (pstStock->psPath == NULL) {
@@ -42,15 +72,25 @@ int stockInit(tStock *pstStock, tProduct *pstProducts, int nNumProducts, const c
         pstStock->psPath = NULL;
         return -1;
     }
-    pstStock->pstProducts = pstProducts;        // takes ownership
+    // From now on the stock owns the array (free in stockDestroy)
+    pstStock->pstProducts = pstProducts;
     pstStock->nNumProducts = nNumProducts;
     return 0;
 }
 
-// Plain-value copy (tProduct has no pointers), so it can be sent without holding the lock
+/***********************************************
+ *
+ * @Name: stockSnapshot
+ * @Def: Makes a copy of all the products, to send them without holding the lock.
+ * @Arg: In/Out: pstStock pointer to the stock
+ *       Out: pnNumProducts pointer to store the number of products copied
+ * @Ret: Returns a new array that the caller must free, or NULL on malloc failure.
+ *
+ ***********************************************/
 tProduct *stockSnapshot(tStock *pstStock, int *pnNumProducts) {
     tProduct *pstCopy;
 
+    // Copy while locked
     pthread_mutex_lock(&pstStock->stMutex);
     *pnNumProducts = pstStock->nNumProducts;
     pstCopy = malloc(sizeof(tProduct) * (pstStock->nNumProducts > 0 ? pstStock->nNumProducts : 1));
@@ -58,9 +98,22 @@ tProduct *stockSnapshot(tStock *pstStock, int *pnNumProducts) {
         memcpy(pstCopy, pstStock->pstProducts, sizeof(tProduct) * pstStock->nNumProducts);
     }
     pthread_mutex_unlock(&pstStock->stMutex);
-    return pstCopy;                             // NULL on malloc failure
+    return pstCopy;
 }
 
+/***********************************************
+ *
+ * @Name: stockBuy
+ * @Def: A ship buys kilograms of a product: they are removed from the stock
+ *       and the change is saved to the file.
+ * @Arg: In/Out: pstStock pointer to the stock
+ *       In: psName name of the product
+ *       In: nAmount kilograms to buy
+ *       Out: pnCost pointer to store the total cost in gold
+ *       Out: psCanonical buffer (MAX_NAME bytes) to store the product name as the island writes it
+ * @Ret: Returns STOCK_OK on success, or the reason of the failure.
+ *
+ ***********************************************/
 tStockResult stockBuy(tStock *pstStock, const char *psName, int nAmount, int *pnCost, char *psCanonical) {
     tStockResult eRes = STOCK_OK;
     tProduct *pstP;
@@ -68,6 +121,8 @@ tStockResult stockBuy(tStock *pstStock, const char *psName, int nAmount, int *pn
     if (nAmount <= 0) {
         return STOCK_BAD_AMOUNT;
     }
+
+    // Check, update and save while locked
     pthread_mutex_lock(&pstStock->stMutex);
     pstP = findProduct(pstStock, psName);
     if (pstP == NULL) {
@@ -77,7 +132,8 @@ tStockResult stockBuy(tStock *pstStock, const char *psName, int nAmount, int *pn
     } else {
         pstP->nQuantity -= nAmount;
         if (saveStock(pstStock) < 0) {
-            pstP->nQuantity += nAmount;         // undo: memory must match the file
+            // Undo: memory must match the file
+            pstP->nQuantity += nAmount;
             eRes = STOCK_IO_ERROR;
         } else {
             *pnCost = nAmount * pstP->nPrice;
@@ -89,6 +145,19 @@ tStockResult stockBuy(tStock *pstStock, const char *psName, int nAmount, int *pn
     return eRes;
 }
 
+/***********************************************
+ *
+ * @Name: stockSell
+ * @Def: A ship sells kilograms of a product: they are added to the stock
+ *       and the change is saved to the file.
+ * @Arg: In/Out: pstStock pointer to the stock
+ *       In: psName name of the product
+ *       In: nAmount kilograms to sell
+ *       Out: pnIncome pointer to store the total income in gold
+ *       Out: psCanonical buffer (MAX_NAME bytes) to store the product name as the island writes it
+ * @Ret: Returns STOCK_OK on success, or the reason of the failure.
+ *
+ ***********************************************/
 tStockResult stockSell(tStock *pstStock, const char *psName, int nAmount, int *pnIncome, char *psCanonical) {
     tStockResult eRes = STOCK_OK;
     tProduct *pstP;
@@ -96,14 +165,18 @@ tStockResult stockSell(tStock *pstStock, const char *psName, int nAmount, int *p
     if (nAmount <= 0) {
         return STOCK_BAD_AMOUNT;
     }
+
+    // Same locked step as in stockBuy
     pthread_mutex_lock(&pstStock->stMutex);
     pstP = findProduct(pstStock, psName);
     if (pstP == NULL) {
-        eRes = STOCK_NO_PRODUCT;                    // the island has no price for it
+        // The island has no price for this product
+        eRes = STOCK_NO_PRODUCT;
     } else {
         pstP->nQuantity += nAmount;
         if (saveStock(pstStock) < 0) {
-            pstP->nQuantity -= nAmount;             // undo: memory must match the file
+            // Undo: memory must match the file
+            pstP->nQuantity -= nAmount;
             eRes = STOCK_IO_ERROR;
         } else {
             *pnIncome = nAmount * pstP->nPrice;
@@ -115,6 +188,14 @@ tStockResult stockSell(tStock *pstStock, const char *psName, int nAmount, int *p
     return eRes;
 }
 
+/***********************************************
+ *
+ * @Name: stockDestroy
+ * @Def: Frees the products and the path of the stock and destroys its mutex.
+ * @Arg: In/Out: pstStock pointer to the stock to destroy
+ * @Ret: None.
+ *
+ ***********************************************/
 void stockDestroy(tStock *pstStock) {
     free(pstStock->pstProducts);
     free(pstStock->psPath);

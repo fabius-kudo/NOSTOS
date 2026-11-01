@@ -47,6 +47,7 @@ typedef struct {
     int nNumRoutes;
 } tIsland;
 
+// Prototypes
 tIsland parseIsland(char *psIslandsPath);
 void freeIsland(tIsland stIsland);
 tProduct *parseStock(char *psStockPath, int *pnNumProducts);
