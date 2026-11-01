@@ -21,11 +21,14 @@
 #include "custom_io.h"
 
 // Custom Type Definitions
+
+//One product carried in the cargo
 typedef struct {
     char *psProduct;
     int nQuantity;
 } tFood;
 
+//Contents of odysseus.dat
 typedef struct {
     char *psName;
     char *psFilePath;
@@ -42,6 +45,7 @@ typedef struct {
     tFood *pstFoodSupplies;
 } tOdysseus;
 
+// Voyage accepted at Ithaca
 typedef struct {
     int nId;
     char *psObject;
@@ -49,17 +53,20 @@ typedef struct {
     int nReward;
 } tActiveVoyage;
 
+// An island the ship knows how to reach
 typedef struct {
     char *sName;
     char *sIp;
     int nPort;
 } tKnownIsland;
 
+// A known direct route between two islands (bidirectional)
 typedef struct {
     char *sA;
     char *sB;
 } tKnownRoute;
 
+//Complete state of the ship while the program runs
 typedef struct {
     tOdysseus stConfig;
     int nMoney;
@@ -70,9 +77,9 @@ typedef struct {
     tActiveVoyage stVoyage;
 
     tKnownIsland *pstIslands;   
-    int nNumIslands;   // starts with Aeaea from the config
+    int nNumIslands;
     tKnownRoute *pstRoutes;     
-    int nNumRoutes;    // starts empty
+    int nNumRoutes;
     int nShouldExit;
 } tShip;
 

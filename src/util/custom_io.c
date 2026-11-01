@@ -1,7 +1,7 @@
 /***********************************************
  *
  * @File : custom_io.c
- * @Purpose : I/O functions for handling dynamic strings
+ * @Purpose : Helpers for terminal and file I/O using only read/write
  * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
  * @Date : 3/10/26
  *
@@ -11,10 +11,12 @@
 
 /***********************************************
  *
- * @Name: 
- * @Def: 
- * @Arg: In: 
- * @Ret: 
+ * @Name: printAndFree
+ * @Def: Writes a heap string to stdout and frees it. Meant to be used right
+ *       after asprintf: if asprintf failed the pointer is NULL, and an
+ *       error is reported on stderr instead.
+ * @Arg: In: psMsg string allocated with malloc/asprintf, or NULL
+ * @Ret: None. psMsg must not be used after the call.
  *
  ***********************************************/
 void printAndFree(char *psMsg) {
