@@ -11,6 +11,23 @@
 
 /***********************************************
  *
+ * @Name: 
+ * @Def: 
+ * @Arg: In: 
+ * @Ret: 
+ *
+ ***********************************************/
+static void printAndFree(char *psMsg) {
+    if (psMsg != NULL) {
+        write(STDOUT_FILENO, psMsg, strlen(psMsg));
+        free(psMsg);
+    } else{
+        printE("asprintf error\n");
+    }
+}
+
+/***********************************************
+ *
  * @Name: readDynamic
  * @Def: Reads characters dynamically from a file descriptor into a buffer.
  * @Arg: In: nFd file descriptor to read from

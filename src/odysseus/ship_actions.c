@@ -1,30 +1,16 @@
 #define _GNU_SOURCE
 #include "ship_actions.h"
+#include "custom_io.h"
 
 #define MAP_PRICE 50
 
-/* ---------- small output helpers ---------- */
-
-static void say(const char *psMsg) {
-    write(STDOUT_FILENO, psMsg, strlen(psMsg));
-}
-
-// Writes a heap string to stdout and frees it. Does nothing for NULL.
-static void sayAndFree(char *psMsg) {
-    if (psMsg != NULL) {
-        write(STDOUT_FILENO, psMsg, strlen(psMsg));
-        free(psMsg);
-    } else{
-        say("asprintf error\n");
-    }
-}
 
 static void sayError(const char *psReason) {
     char *psMsg = NULL;
     if (asprintf(&psMsg, "Error: %s\n", psReason) < 0) {
         psMsg = NULL;                       // contents are undefined when asprintf fails
     }
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
 }
 
 /* ---------- ship state helpers ---------- */
@@ -118,7 +104,7 @@ int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     char sData[FRAME_DATA_SIZE + 1];
 
     if (pstShip->nIthacaFd >= 0) {
-        say("Already connected to Ithaca\n");
+        printF("Already connected to Ithaca\n");
         return 0;
     }
 
@@ -128,20 +114,20 @@ int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
                  pstShip->psLocation ? pstShip->psLocation : "port") < 0) {
         psMsg = NULL;
     }
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
     leaveCurrentPort(pstShip);
 }
 
     int nFd = connectToServer(pstShip->stConfig.psIthacaIp, pstShip->stConfig.nIthacaPort);
     if (nFd < 0) {
-        say("Error: cannot reach Ithaca.\n");
+        printE("Error: cannot reach Ithaca.\n");
         return -1;
     }
 
     if (sendFrame(nFd, TYPE_CONNECT_ITHACA, FLAG_REQUEST, 
             pstShip->stConfig.psName, (int)strlen(pstShip->stConfig.psName)) != 0
             || recvFrame(nFd, &stReply) != 1) {
-        say("Error: connection to Ithaca lost.\n");
+        printE("Error: connection to Ithaca lost.\n");
         closeSocket(&nFd);
         return -1;
     }
@@ -153,12 +139,12 @@ int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
 
     if (setLocation(pstShip, "Ithaca") < 0) {
-        say("Error: out of memory.\n");
+        printE("Error: out of memory.\n");
         closeSocket(&nFd);
         return -1;
     }
     pstShip->nIthacaFd = nFd;
-    say("Connected to Ithaca.\n");
+    printF("Connected to Ithaca.\n");
     return 0;
 }
 
@@ -170,16 +156,16 @@ int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     char sData[FRAME_DATA_SIZE + 1];
 
     if (pstShip->nIthacaFd < 0) {
-        say("Error: not connected to Ithaca.\n");
+        printF("Error: not connected to Ithaca.\n");
         return -1;
     }
     if (pstShip->nHasVoyage) {
-        say("Error: you already have an active voyage.\n");
+        printF("Error: you already have an active voyage.\n");
         return -1;
     }
 
     if (sendFrame(pstShip->nIthacaFd, TYPE_LIST_VOYAGES, FLAG_REQUEST, NULL, 0) != 0) {
-        say("Error: connection to Ithaca lost.\n");
+        printF("Error: connection to Ithaca lost.\n");
         closeSocket(&pstShip->nIthacaFd);
         return -1;
     }
@@ -188,7 +174,7 @@ int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     int nTotal = 1;
     while (nIndex < nTotal) {
         if (recvFrame(pstShip->nIthacaFd, &stFrame) != 1) {
-            say("Error: connection to Ithaca lost.\n");
+            printF("Error: connection to Ithaca lost.\n");
             closeSocket(&pstShip->nIthacaFd);
             return -1;
         }
@@ -203,7 +189,7 @@ int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         char *psTotal = strtok(NULL, "&");
 
         if (psTotal == NULL) {                          // Ithaca sends just "0" when empty
-            say("No voyages available.\n");
+            printF("No voyages available.\n");
             return 0;
         }
         char *psId = strtok(NULL, "&");
@@ -212,25 +198,25 @@ int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         char *psReward = strtok(NULL, "&");
 
         if (!psIndex || !psId || !psObject || !psDest || !psReward) {
-            say("Error: malformed reply from Ithaca.\n");
+            printF("Error: malformed reply from Ithaca.\n");
             return -1;
         }
 
         nIndex = atoi(psIndex);
         nTotal = atoi(psTotal);
         if (nIndex <= 0 || nTotal <= 0) {
-            say("Error: malformed reply from Ithaca.\n");
+            printF("Error: malformed reply from Ithaca.\n");
             return -1;
         }
         if (nIndex == 1) {
-            say("--- AVAILABLE VOYAGES ---\n");
+            printF("--- AVAILABLE VOYAGES ---\n");
         }
 
         char *psLine = NULL;
         if (asprintf(&psLine, "%2s. %-22s -> %-10s [%s]\n", psId, psObject, psDest, psReward) < 0) {
             psLine = NULL;
         }
-        sayAndFree(psLine);
+        printAndFree(psLine);
     }
     return 0;
 }
@@ -242,18 +228,18 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     char sData[FRAME_DATA_SIZE + 1];
 
     if (pstShip->nIthacaFd < 0) {
-        say("Error: not connected to Ithaca.\n");
+        printF("Error: not connected to Ithaca.\n");
         return -1;
     }
     if (pstShip->nHasVoyage) {
-        say("Error: you already have an active voyage.\n");
+        printF("Error: you already have an active voyage.\n");
         return -1;
     }
 
     if (sendFrame(pstShip->nIthacaFd, TYPE_ACCEPT, FLAG_REQUEST,
                   ppsArgv[0], (int)strlen(ppsArgv[0])) != 0
         || recvFrame(pstShip->nIthacaFd, &stReply) != 1) {
-        say("Error: connection to Ithaca lost.\n");
+        printF("Error: connection to Ithaca lost.\n");
         closeSocket(&pstShip->nIthacaFd);
         return -1;
     }
@@ -271,12 +257,12 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     char *psDest = strtok(NULL, "&");
     char *psReward = strtok(NULL, "&");
     if (!psOk || !psId || !psObject || !psDest || !psReward) {
-        say("Error: malformed reply from Ithaca.\n");
+        printF("Error: malformed reply from Ithaca.\n");
         return -1;
     }
 
     if (setVoyage(pstShip, atoi(psId), psObject, psDest, atoi(psReward)) < 0) {
-        say("Error: out of memory.\n");
+        printE("Error: out of memory.\n");
         return -1;
     }
 
@@ -285,7 +271,7 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
                  pstShip->stVoyage.nId, pstShip->stVoyage.psDestination) < 0) {
         psMsg = NULL;
     }
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
     return 0;
 }
 
@@ -356,14 +342,14 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
 
         if (nRet < 0) {
             // EINTR = a signal arrived (CTRL+C); anything else is a real error
-            pstShip->nShouldExit = 1;
+            //pstShip->nShouldExit = 1;
             closeSocket(&pstShip->nIslandFd);
             return 0;
         }
 
         if (nRet > 0) {
             if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
-                say("Error: connection to the island lost.\n");
+                printF("Error: connection to the island lost.\n");
                 closeSocket(&pstShip->nIslandFd);
                 return 0;
             }
@@ -373,7 +359,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
                 if (asprintf(&psMsg, "\n>>> %s has granted access to the port.\n", psIsland) < 0) {
                     psMsg = NULL;
                 }
-                sayAndFree(psMsg);
+                printAndFree(psMsg);
                 return 1;
             }
             continue;
@@ -387,7 +373,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
                      totalProvisions(pstShip)) < 0) {
             psMsg = NULL;
         }
-        sayAndFree(psMsg);
+        printAndFree(psMsg);
 
         if (totalProvisions(pstShip) <= 0) {
             psMsg = NULL;
@@ -395,9 +381,9 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
                          pstShip->stConfig.psName) < 0) {
                 psMsg = NULL;
             }
-            sayAndFree(psMsg);
+            printAndFree(psMsg);
             closeSocket(&pstShip->nIslandFd);
-            pstShip->nShouldExit = 1;
+            //pstShip->nShouldExit = 1;
             return 0;
         }
     }
@@ -412,7 +398,7 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     int nFd;
 
     if (pstShip->psLocation == NULL || pstShip->psLocation[0] == '\0') {
-        say("Error: you are not at any port.\n");
+        printF("Error: you are not at any port.\n");
         return -1;
     }
 
@@ -432,14 +418,14 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         if (asprintf(&psMsg, "We can't sail to %s from here...\n", ppsArgv[0]) < 0) {
             psMsg = NULL;
         }
-        sayAndFree(psMsg);
+        printAndFree(psMsg);
         return -1;
     }
 
     if (asprintf(&psMsg, "Leaving %s...\nSailing to %s...\n", pstShip->psLocation, pstDest->sName) < 0) {
         psMsg = NULL;
     }
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
     leaveCurrentPort(pstShip);
 
     nFd = connectToServer(pstDest->sIp, pstDest->nPort);
@@ -448,13 +434,13 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         if (asprintf(&psMsg, "Error: cannot reach %s (%s).\n", pstDest->sName, strerror(errno)) < 0) {
             psMsg = NULL;
         }
-        sayAndFree(psMsg);
+        printAndFree(psMsg);
         return -1;                          // at sea; psLocation still holds the last port
     }
 
     if (sendTextFrame(nFd, TYPE_ISLAND_ARRIVE, FLAG_REQUEST, pstShip->stConfig.psName) != 0
         || recvFrame(nFd, &stReply) != 1) {
-        say("Error: the island did not answer.\n");
+        printF("Error: the island did not answer.\n");
         closeSocket(&nFd);
         return -1;
     }
@@ -471,15 +457,15 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     if (asprintf(&psMsg, "\nConnected to %s.\n", pstDest->sName) < 0) {
         psMsg = NULL;
     }
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
 
     if (strcmp(sData, "WAIT") == 0) {
         psMsg = NULL;
         if (asprintf(&psMsg, "Waiting off the coast of %s...\n", pstDest->sName) < 0) {
             psMsg = NULL;
         }
-        sayAndFree(psMsg);
-        say("The harbor is full. We drop anchor and wait.\n");
+        printAndFree(psMsg);
+        printF("The harbor is full. We drop anchor and wait.\n");
         if (!waitForDocking(pstShip, pstDest->sName)) {
             return -1;
         }
@@ -488,11 +474,11 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         if (asprintf(&psMsg, "%s has granted access to the port.\n", pstDest->sName) < 0) {
             psMsg = NULL;
         }
-        sayAndFree(psMsg);
+        printAndFree(psMsg);
     }
 
     if (setLocation(pstShip, pstDest->sName) < 0) {
-        say("Error: out of memory.\n");
+        printF("Error: out of memory.\n");
         return -1;
     }
     return 0;
@@ -508,11 +494,11 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     char sData[FRAME_DATA_SIZE + 1];
 
     if (pstShip->nIslandFd < 0 || pstShip->psLocation == NULL) {
-        say("Error: you are not docked at any island.\n");
+        printF("Error: you are not docked at any island.\n");
         return -1;
     }
     if (sendFrame(pstShip->nIslandFd, TYPE_LIST_MARKET, FLAG_REQUEST, NULL, 0) != 0) {
-        say("Error: connection to the island lost.\n");
+        printF("Error: connection to the island lost.\n");
         closeSocket(&pstShip->nIslandFd);
         return -1;
     }
@@ -521,7 +507,7 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     int nTotal = 1;
     while (nIndex < nTotal) {
         if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
-            say("Error: connection to the island lost.\n");
+            printF("Error: connection to the island lost.\n");
             closeSocket(&pstShip->nIslandFd);
             return -1;
         }
@@ -538,14 +524,14 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         char *psAmount = strtok(NULL, "&");
         char *psPrice = strtok(NULL, "&");
         if (!psIndex || !psTotal || !psName || !psAmount || !psPrice) {
-            say("Error: malformed reply from the island.\n");
+            printF("Error: malformed reply from the island.\n");
             return -1;
         }
 
         nIndex = atoi(psIndex);
         nTotal = atoi(psTotal);
         if (nIndex <= 0 || nTotal <= 0) {
-            say("Error: malformed reply from the island.\n");
+            printF("Error: malformed reply from the island.\n");
             return -1;
         }
 
@@ -563,7 +549,7 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
                 psLine = NULL;
             }
             free(psUpper);
-            sayAndFree(psLine);
+            printAndFree(psLine);
         }
         psLine = NULL;
 
@@ -576,7 +562,7 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
                 psLine = NULL;
             }
         }
-        sayAndFree(psLine);
+        printAndFree(psLine);
     }
     return 0;
 }
@@ -589,7 +575,7 @@ static int isDocked(const tShip *pstShip) {
 }
 
 static int islandLost(tShip *pstShip) {
-    say("Error: connection to the island lost.\n");
+    printF("Error: connection to the island lost.\n");
     closeSocket(&pstShip->nIslandFd);
     return -1;
 }
@@ -657,13 +643,13 @@ static int queryPrice(tShip *pstShip, const char *psProduct, int *pnPrice) {
         char *psAmount = strtok(NULL, "&");
         char *psPrice = strtok(NULL, "&");
         if (!psIndex || !psTotal || !psName || !psAmount || !psPrice) {
-            say("Error: malformed reply from the island.\n");
+            printF("Error: malformed reply from the island.\n");
             return -1;
         }
         nIndex = atoi(psIndex);
         nTotal = atoi(psTotal);
         if (nIndex <= 0 || nTotal <= 0) {
-            say("Error: malformed reply from the island.\n");
+            printF("Error: malformed reply from the island.\n");
             return -1;
         }
         if (strcmp(psName, "MAP") != 0 && strcasecmp(psName, psProduct) == 0) {
@@ -682,7 +668,7 @@ static int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProd
     int nRet;
 
     if (nLen < 0) {
-        say("Error: out of memory.\n");
+        printE("Error: out of memory.\n");
         return -1;
     }
     nRet = sendFrame(pstShip->nIslandFd, ucType, FLAG_REQUEST, psData, nLen);
@@ -726,11 +712,11 @@ int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     int nRes;
 
     if (!isDocked(pstShip)) {
-        say("Error: you are not docked at any island.\n");
+        printF("Error: you are not docked at any island.\n");
         return -1;
     }
     if (nAmount <= 0) {
-        say("Error: the amount must be positive.\n");
+        printF("Error: the amount must be positive.\n");
         return -1;
     }
 
@@ -743,7 +729,7 @@ int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return -1;
     }
     if (nAmount > pstShip->nMoney / nPrice) {           // same as nAmount * nPrice > nMoney, no overflow
-        say("Error: not enough gold.\n");
+        printF("Error: not enough gold.\n");
         return -1;
     }
 
@@ -756,19 +742,19 @@ int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return -1;
     }
     if (parseTradeReply(sData, &psProduct, &nBoughtKg, &nCost) < 0) {
-        say("Error: malformed reply from the island.\n");
+        printF("Error: malformed reply from the island.\n");
         return -1;
     }
 
     pstShip->nMoney -= nCost;
     if (addCargo(pstShip, psProduct, nBoughtKg) < 0) {
-        say("Error: out of memory.\n");
+        printE("Error: out of memory.\n");
         return -1;
     }
     if (asprintf(&psMsg, "Bought %d kg of %s for %d gold.\n", nBoughtKg, psProduct, nCost) < 0) {
         psMsg = NULL;
     }
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
     return 0;
 }
 
@@ -785,11 +771,11 @@ int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     int nIdx;
 
     if (!isDocked(pstShip)) {
-        say("Error: you are not docked at any island.\n");
+        printF("Error: you are not docked at any island.\n");
         return -1;
     }
     if (nAmount <= 0) {
-        say("Error: the amount must be positive.\n");
+        printF("Error: the amount must be positive.\n");
         return -1;
     }
     nIdx = findCargo(pstShip, ppsArgv[0]);
@@ -811,7 +797,7 @@ int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return -1;
     }
     if (parseTradeReply(sData, &psProduct, &nSoldKg, &nIncome) < 0) {
-        say("Error: malformed reply from the island.\n");
+        printF("Error: malformed reply from the island.\n");
         return -1;
     }
 
@@ -820,7 +806,7 @@ int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     if (asprintf(&psMsg, "Sold %d kg of %s for %d gold.\n", nSoldKg, psProduct, nIncome) < 0) {
         psMsg = NULL;
     }
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
     return 0;
 }
 
@@ -879,27 +865,27 @@ int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     int nIndex = 0, nTotal = 1, nCharged = 0, nRoutes = 0;
 
     if (nArgc != 1 || atoi(ppsArgv[0]) != 1) {
-        say("Error: only one map can be bought at a time (BUY MAP 1).\n");
+        printF("Error: only one map can be bought at a time (BUY MAP 1).\n");
         return -1;
     }
     if (pstShip->nIslandFd < 0) {
-        say("Error: you are not docked at an island.\n");
+        printF("Error: you are not docked at an island.\n");
         return -1;
     }
     if (pstShip->nMoney < MAP_PRICE) {
-        say("Error: not enough gold.\n");
+        printF("Error: not enough gold.\n");
         return -1;
     }
 
     if (sendFrame(pstShip->nIslandFd, TYPE_BUY_MAP, FLAG_REQUEST, "1", 1) != 0) {
-        say("Error: connection to the island lost.\n");
+        printF("Error: connection to the island lost.\n");
         closeSocket(&pstShip->nIslandFd);
         return -1;
     }
 
     while (nIndex < nTotal) {
         if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
-            say("Error: connection to the island lost.\n");
+            printF("Error: connection to the island lost.\n");
             closeSocket(&pstShip->nIslandFd);
             return -1;
         }
@@ -915,7 +901,7 @@ int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         char *psIndex = strtok(NULL, "&");
         char *psTotal = strtok(NULL, "&");
         if (!psOk || !psPrice || !psIndex) {
-            say("Error: malformed reply from the island.\n");
+            printF("Error: malformed reply from the island.\n");
             return -1;
         }
 
@@ -931,24 +917,24 @@ int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         char *psIp = strtok(NULL, "&");
         char *psPort = strtok(NULL, "&");
         if (!psName || !psIp || !psPort) {
-            say("Error: malformed reply from the island.\n");
+            printF("Error: malformed reply from the island.\n");
             return -1;
         }
 
         nIndex = atoi(psIndex);
         nTotal = atoi(psTotal);
         if (nIndex <= 0 || nTotal <= 0) {
-            say("Error: malformed reply from the island.\n");
+            printF("Error: malformed reply from the island.\n");
             return -1;
         }
 
         if (addKnownIsland(pstShip, psName, psIp, atoi(psPort)) < 0) {
-            say("Error: out of memory.\n");
+            printE("Error: out of memory.\n");
             return -1;
         }
         int nAdded = addKnownRoute(pstShip, pstShip->psLocation, psName);
         if (nAdded < 0) {
-            say("Error: out of memory.\n");
+            printE("Error: out of memory.\n");
             return -1;
         }
         nRoutes += nAdded; 
@@ -958,7 +944,7 @@ int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     if (asprintf(&psMsg, "Bought the map of %s for %d gold.\n%s", pstShip->psLocation, MAP_PRICE, nRoutes > 0 ? "New routes have been charted.\n" : "") < 0) {
         psMsg = NULL;
     }
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
     return 0;
 }
 
@@ -971,7 +957,7 @@ int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     SPHRAGIS_Island *pstMap = calloc(nCount, sizeof(SPHRAGIS_Island));
 
     if (pstMap == NULL) {
-        say("Error: out of memory.\n");
+        printE("Error: out of memory.\n");
         return -1;
     }
 
@@ -1012,16 +998,16 @@ int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
 
     if (!nOk) {
-        say("Error: out of memory.\n");
+        printE("Error: out of memory.\n");
     } else {
         // Let SPHRAGIS draw the map, and turn its error codes into messages
         int nRet = SPHRAGIS_display_map(pstMap, nCount);
         if (nRet == SPHRAGIS_ERROR) {
-            say("Error: the terminal needs at least 80 columns to draw the map.\n");
+            printF("Error: the terminal needs at least 80 columns to draw the map.\n");
         } else if (nRet == SPHRAGIS_ERROR_INVALID_ISLAND) {
-            say("Error: the map contains an invalid or duplicated island.\n");
+            printF("Error: the map contains an invalid or duplicated island.\n");
         } else if (nRet == SPHRAGIS_ERROR_INVALID_CONNECTION) {
-            say("Error: the map contains an invalid route.\n");
+            printF("Error: the map contains an invalid route.\n");
         }
         nOk = (nRet == SPHRAGIS_OK);
     }
@@ -1055,17 +1041,17 @@ int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         psMsg = NULL;
     }
     free(psUpper);
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
 
 
-    say("\nCargo:\n");
+    printF("\nCargo:\n");
     for (int i = 0; i < tOdysseus.nNumFoodItems; i++) {
         tFood *pstFood = &tOdysseus.pstFoodSupplies[i];
         psMsg = NULL;
         if (asprintf(&psMsg, "%s: %d kg\n", pstFood->psProduct, pstFood->nQuantity) < 0) {
             psMsg = NULL;
         }
-        sayAndFree(psMsg);
+        printAndFree(psMsg);
         nTotal += pstFood->nQuantity;
     } 
 
@@ -1073,7 +1059,7 @@ int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     if (asprintf(&psMsg, "\nTotal provisions: %d kg\n\n", nTotal) < 0) {
         psMsg = NULL;
     }
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
 
     tActiveVoyage tVoyage = pstShip->stVoyage;
 
@@ -1082,9 +1068,9 @@ int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         if (asprintf(&psMsg, "Current voyage: %s -> %s\nReward: %d\n", tVoyage.psObject, tVoyage.psDestination, tVoyage.nReward) < 0) {
             psMsg = NULL;
         }
-        sayAndFree(psMsg);
+        printAndFree(psMsg);
     } else {
-        say("Current voyage: None\nReward: None\n");
+        printF("Current voyage: None\nReward: None\n");
     }
 
     psMsg = NULL;
@@ -1092,6 +1078,6 @@ int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
                  pstShip->psLocation ? pstShip->psLocation : "None") < 0) {
         psMsg = NULL;
     }
-    sayAndFree(psMsg);
+    printAndFree(psMsg);
     return 0;
 }

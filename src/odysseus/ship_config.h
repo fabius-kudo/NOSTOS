@@ -18,7 +18,7 @@
 #include <fcntl.h>
 
 // Project Includes
-#include "custom_dynamic.h"
+#include "custom_io.h"
 
 // Custom Type Definitions
 typedef struct {
@@ -72,7 +72,7 @@ typedef struct {
     tKnownIsland *pstIslands;   
     int nNumIslands;   // starts with Aeaea from the config
     tKnownRoute *pstRoutes;     
-    int nNumRoutes;
+    int nNumRoutes;    // starts empty
     int nShouldExit;
 } tShip;
 
