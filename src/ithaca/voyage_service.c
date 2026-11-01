@@ -1,8 +1,13 @@
+/***********************************************
+ *
+ * @File : voyage_service.c
+ * @Purpose : Server-side handling of the Odysseus <-> Ithaca protocol.
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 1/11/26
+ *
+ ***********************************************/
+
 #define _GNU_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include "voyage_service.h"
 
 // Prints ">>> <name> <text>\n" in a single write so threads don't interleave lines.
@@ -16,6 +21,18 @@ static void logEvent(const char *psName, const char *psText) {
     }
 }
 
+/***********************************************
+ *
+ * @Name: handleConnect
+ * @Def: Handles CONNECT (0x01). Stores the Odysseus name sent in the frame,
+ *       marks the session as identified and replies OK. Replies with an
+ *       error frame if the name is empty or the client already identified
+ *       itself; the connection stays open in both cases.
+ * @Arg: In/Out: pstSession session of the requesting client
+ *       In: pstFrame received request frame
+ * @Ret: None.
+ *
+ ***********************************************/
 static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     char sName[FRAME_DATA_SIZE + 1]; 
     
@@ -45,6 +62,17 @@ static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     }
 }
 
+/***********************************************
+ *
+ * @Name: handleDisconnect
+ * @Def: Handles DISCONNECT (0x05), sent by an Odysseus before setting sail
+ *       or closing. Forgets the client's identity and confirms with OK, so
+ *       the Odysseus can close the socket. Any voyage assigned to it stays
+ *       assigned while the ship is at sea.
+ * @Arg: In/Out: pstSession session of the requesting client
+ * @Ret: None.
+ *
+ ***********************************************/
 static void handleDisconnect(tClientSession *pstSession) {
     if (!pstSession->nIdentified) {
         sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_ERR, "NOT_CONNECTED");
@@ -52,13 +80,26 @@ static void handleDisconnect(tClientSession *pstSession) {
     }
 
     logEvent(pstSession->psName, "has left Ithaca. Fair winds!");
-    free(pstSession->psName);            // replaces: pstSession->sName[0] = '\0';
+    free(pstSession->psName);
     pstSession->psName = NULL;
     pstSession->nIdentified = 0;
 
     sendTextFrame(pstSession->nFd, TYPE_DISCONNECT, FLAGS_OK, "OK");
 }
 
+/***********************************************
+ *
+ * @Name: handleListVoyages
+ * @Def: Handles LIST VOYAGES (0x02). Sends one frame per available voyage
+ *       in the format Index&Total&ID&Object&Destination&Reward, or a single
+ *       "0" frame if none are available. Before listing, any voyage still
+ *       assigned to this Odysseus is marked as failed: it can only happen
+ *       when the ship was lost at sea and restarted, as an Odysseus with an
+ *       active voyage never asks for the list.
+ * @Arg: In: pstSession session of the requesting client
+ * @Ret: None.
+ *
+ ***********************************************/
 static void handleListVoyages(tClientSession *pstSession) {
     tVoyageStore *pstStore = pstSession->pstStore;
     tVoyage *pstAvail;
@@ -103,6 +144,19 @@ static void handleListVoyages(tClientSession *pstSession) {
     logEvent(pstSession->psName, "requested available voyages.");
 }
 
+/***********************************************
+ *
+ * @Name: handleAccept
+ * @Def: Handles ACCEPT (0x03). Assigns the requested voyage to this Odysseus
+ *       if it exists, is still available, and the ship holds no other
+ *       assigned voyage. The check and the assignment happen under the same
+ *       lock, so two ships can never get the same voyage. Replies
+ *       OK&ID&Object&Destination&Reward, or an error frame with the reason.
+ * @Arg: In: pstSession session of the requesting client
+ *       In: pstFrame received request frame (data = voyage ID)
+ * @Ret: None.
+ *
+ ***********************************************/
 static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     tVoyageStore *pstStore = pstSession->pstStore;
     char sData[FRAME_DATA_SIZE + 1];
@@ -111,7 +165,7 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     tVoyage *pstVoyage = NULL;
     int nId, nLen = 0;
 
-    // Get the voyage ID from the frame data
+    //Get the voyage ID from the frame data
     frameDataToString(pstFrame, sData, sizeof(sData));
     nId = atoi(sData);
     if (sData[0] == '\0' || nId <= 0) {
@@ -121,8 +175,7 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
 
     pthread_mutex_lock(&pstStore->stMutex);
 
-    // The loop must not stop at the match: it also has to check that this ship
-    // doesn't already hold another voyage, which needs a pass over all of them.
+    //The loop doesnt stop at the match, it also has to check that this ship doesn't already hold another voyage
     for (int i = 0; i < pstStore->nNumVoyages; i++) {
         tVoyage *pstV = &pstStore->pstVoyages[i];
 
@@ -181,6 +234,17 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     }
 }
 
+/***********************************************
+ *
+ * @Name: serveClient
+ * @Def: Serves one Odysseus until it disconnects: reads request frames in a
+ *       loop and dispatches them by type. Frames that are not requests, or
+ *       of an unknown type, are answered with a NACK frame. Every request
+ *       except CONNECT requires the client to be identified first.
+ * @Arg: In/Out: pstSession session of the client to serve
+ * @Ret: None. The caller closes the socket and frees the session.
+ *
+ ***********************************************/
 void serveClient(tClientSession *pstSession) {
     tFrame stFrame;
 
@@ -219,4 +283,9 @@ void serveClient(tClientSession *pstSession) {
                 break;
         }
     }
+
+    //Free crashed client
+    free(pstSession->psName);
+    pstSession->psName = NULL;
+    pstSession->nIdentified = 0;
 }

@@ -51,7 +51,6 @@ int main(int argc, char *argv[]) {
     int nTokenCount = 0;
     char *psLine = NULL;
     char *apsTokens[MAX_ARGS];
-    //tOdysseus stOdysseus;
     tShip stShip;
     
     if (argc != 2) {

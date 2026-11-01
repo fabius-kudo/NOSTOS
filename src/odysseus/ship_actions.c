@@ -1,10 +1,24 @@
+/***********************************************
+ *
+ * @File : ship_actions.c
+ * @Purpose : Handlers for the Odysseus terminal commands. Each handler checks
+ *            that the command makes sense in the ship's current state, talks
+ *            to Ithaca or to the docked island when needed, updates the ship
+ *            and prints the result.
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 1/11/26
+ *
+ ***********************************************/
+
 #define _GNU_SOURCE
 #include "ship_actions.h"
-#include "custom_io.h"
 
-#define MAP_PRICE 50
-
-
+/***********************************************
+ * @Name: sayError
+ * @Def: Prints "Error: <reason>" on the terminal.
+ * @Arg: In: psReason text of the error (often the reason sent by a server)
+ * @Ret: None.
+ ***********************************************/
 static void sayError(const char *psReason) {
     char *psMsg = NULL;
     if (asprintf(&psMsg, "Error: %s\n", psReason) < 0) {
@@ -13,20 +27,34 @@ static void sayError(const char *psReason) {
     printAndFree(psMsg);
 }
 
-/* ---------- ship state helpers ---------- */
-
-// Replaces the ship's location with a heap copy. Returns 0 on success, -1 on malloc failure.
+/***********************************************
+ * @Name: setLocation
+ * @Def: Replaces the ship's current location with a heap copy of the name.
+ * @Arg: In/Out: pstShip ship to update
+ *       In: psName new location
+ * @Ret: 0 on success, -1 if memory could not be allocated (location unchanged).
+ ***********************************************/
 static int setLocation(tShip *pstShip, const char *psName) {
     char *psCopy = dupString(psName);
     if (psCopy == NULL) {
         return -1;
     }
-    free(pstShip->psLocation);              // free(NULL) is fine on the first call
+    free(pstShip->psLocation); // free(NULL) is fine on the first call
     pstShip->psLocation = psCopy;
     return 0;
 }
 
-// Replaces the active voyage. Returns 0 on success, -1 on malloc failure.
+/***********************************************
+ * @Name: setVoyage
+ * @Def: Stores the voyage accepted at Ithaca as the ship's active voyage,
+ *       replacing any previous one. The strings are copied.
+ * @Arg: In/Out: pstShip ship to update
+ *       In: nId voyage identifier
+ *       In: psObject object to transport
+ *       In: psDest destination island
+ *       In: nReward gold paid on completion
+ * @Ret: 0 on success, -1 if memory could not be allocated (voyage unchanged).
+ ***********************************************/
 static int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *psDest, int nReward) {
     char *psObjCopy = dupString(psObject);
     char *psDestCopy = dupString(psDest);
@@ -46,7 +74,14 @@ static int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *
     return 0;
 }
 
-// Closes the connections and frees everything the ship owns, including its config.
+/***********************************************
+ * @Name: releaseShip
+ * @Def: Closes any open connection and frees everything the ship owns:
+ *       location, voyage, known islands and routes, and the parsed config.
+ *       The ship is left zeroed with both sockets set to -1.
+ * @Arg: In/Out: pstShip ship to release
+ * @Ret: None.
+ ***********************************************/
 void releaseShip(tShip *pstShip) {
     closeSocket(&pstShip->nIthacaFd);
     closeSocket(&pstShip->nIslandFd);
@@ -73,6 +108,15 @@ void releaseShip(tShip *pstShip) {
     pstShip->nIslandFd = -1;
 }
 
+/***********************************************
+ * @Name: leaveCurrentPort
+ * @Def: Leaves wherever the ship is connected: sends DISCONNECT (0x05) to
+ *       Ithaca or DEPARTURE (0x16) to the island, waits for the
+ *       confirmation and closes the socket. The ship leaves even if the
+ *       confirmation never arrives.
+ * @Arg: In/Out: pstShip ship that leaves
+ * @Ret: None.
+ ***********************************************/
 static void leaveCurrentPort(tShip *pstShip) {
     tFrame stReply;
     int *pnFd;
@@ -85,17 +129,26 @@ static void leaveCurrentPort(tShip *pstShip) {
         pnFd = &pstShip->nIslandFd;
         ucType = TYPE_ISLAND_LEAVE;
     } else {
-        return;                             // already at sea
+        // already at sea
+        return;
     }
 
     if (sendFrame(*pnFd, ucType, FLAG_REQUEST, NULL, 0) == 0) {
-        recvFrame(*pnFd, &stReply);         // wait for the confirmation; we leave either way
+        recvFrame(*pnFd, &stReply); // wait for the confirmation
     }
     closeSocket(pnFd);
 }
 
 /* ---------- commands ---------- */
 
+/***********************************************
+ * @Name: cmdConnectIthaca
+ * @Def: CONNECT ITHACA. If the ship is docked at an island it leaves it
+ *       first, then connects to Ithaca and identifies itself by name.
+ * @Arg: In/Out: pstShip ship state
+ *       In: nArgc, ppsArgv unused (the command takes no arguments)
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
 int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
     (void)ppsArgv;
@@ -148,6 +201,15 @@ int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     return 0;
 }
 
+/***********************************************
+ * @Name: cmdListVoyages
+ * @Def: LIST VOYAGES. Requests the available voyages and prints one line per
+ *       frame received (Index&Total&ID&Object&Destination&Reward), reading
+ *       exactly Total frames. Not allowed while a voyage is active.
+ * @Arg: In: pstShip ship state (must be connected to Ithaca)
+ *       In: nArgc, ppsArgv unused
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
 int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
     (void)ppsArgv;
@@ -221,6 +283,15 @@ int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     return 0;
 }
 
+/***********************************************
+ * @Name: cmdAcceptVoyage
+ * @Def: ACCEPT <id>. Asks Ithaca for the voyage and, on success, stores it
+ *       as the ship's active voyage. Not allowed while a voyage is active.
+ * @Arg: In/Out: pstShip ship state (must be connected to Ithaca)
+ *       In: nArgc unused
+ *       In: ppsArgv ppsArgv[0] = voyage identifier
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
 int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
 
@@ -246,7 +317,7 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     frameDataToString(&stReply, sData, sizeof(sData));
 
     if (stReply.ucFlags != FLAGS_OK) {
-        sayError(sData);                    // the reason sent by Ithaca
+        sayError(sData); // the reason sent by Ithaca
         return -1;
     }
 
@@ -277,6 +348,14 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
 /* ---------- sailing ---------- */
 
+/***********************************************
+ * @Name: findKnownIsland
+ * @Def: Looks up an island the ship knows (Aeaea or one learned from a map).
+ *       The comparison is case-insensitive.
+ * @Arg: In: pstShip ship state
+ *       In: psName island name
+ * @Ret: Pointer to the island, or NULL if unknown.
+ ***********************************************/
 static const tKnownIsland *findKnownIsland(const tShip *pstShip, const char *psName) {
     for (int i = 0; i < pstShip->nNumIslands; i++) {
         if (strcasecmp(pstShip->pstIslands[i].sName, psName) == 0) {
@@ -286,6 +365,14 @@ static const tKnownIsland *findKnownIsland(const tShip *pstShip, const char *psN
     return NULL;
 }
 
+/***********************************************
+ * @Name: isDirectRoute
+ * @Def: Checks whether a known route connects two islands. Routes are
+ *       bidirectional, so both orders are checked.
+ * @Arg: In: pstShip ship state
+ *       In: psFrom, psTo the two islands
+ * @Ret: 1 if a direct route is known, 0 otherwise.
+ ***********************************************/
 static int isDirectRoute(const tShip *pstShip, const char *psFrom, const char *psTo) {
     for (int i = 0; i < pstShip->nNumRoutes; i++) {
         const tKnownRoute *pstR = &pstShip->pstRoutes[i];
@@ -297,6 +384,12 @@ static int isDirectRoute(const tShip *pstShip, const char *psFrom, const char *p
     return 0;
 }
 
+/***********************************************
+ * @Name: totalProvisions
+ * @Def: Adds up the kilograms of every product in the cargo.
+ * @Arg: In: pstShip ship state
+ * @Ret: Total provisions in kilograms.
+ ***********************************************/
 static int totalProvisions(const tShip *pstShip) {
     int nTotal = 0;
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems; i++) {
@@ -305,21 +398,50 @@ static int totalProvisions(const tShip *pstShip) {
     return nTotal;
 }
 
+/***********************************************
+ * @Name: consumeProvisions
+ * @Def: Removes kilograms of food from the cargo, emptying products in cargo
+ *       order until the amount is covered or the cargo is empty.
+ * @Arg: In/Out: pstShip ship state
+ *       In: nKg kilograms to consume
+ * @Ret: None.
+ ***********************************************/
 static void consumeProvisions(tShip *pstShip, int nKg) {
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems && nKg > 0; i++) {
         tFood *pstFood = &pstShip->stConfig.pstFoodSupplies[i];
-        int nTake = (pstFood->nQuantity < nKg) ? pstFood->nQuantity : nKg;
-        pstFood->nQuantity -= nTake;
-        nKg -= nTake;
+        if (pstFood->nQuantity < nKg) {
+            nKg -= pstFood->nQuantity;
+            pstFood->nQuantity = 0;
+        } else {
+            pstFood->nQuantity -= nKg;
+            nKg = 0;
+        }
     }
 }
 
+/***********************************************
+ * @Name: nowMs
+ * @Def: Current time of a monotonic clock, used to time the rations.
+ *       Monotonic means it never jumps if the system clock is changed.
+ * @Ret: Milliseconds since an arbitrary fixed point.
+ ***********************************************/
 static long nowMs(void) {
     struct timespec stTs;
     clock_gettime(CLOCK_MONOTONIC, &stTs);
     return stTs.tv_sec * 1000L + stTs.tv_nsec / 1000000L;
 }
 
+/***********************************************
+ * @Name: waitForDocking
+ * @Def: Waits offshore after the island answered WAIT. poll() sleeps until
+ *       either the island sends DOCKED or the next ration is due, so no
+ *       CPU is used while waiting. Every full 5 seconds the crew eats 7 kg,
+ *       if provisions reach 0 the ship is lost at sea.
+ * @Arg: In/Out: pstShip ship state (connected to the island)
+ *       In: psIsland island name, for the messages
+ * @Ret: 1 if the ship docked, 0 otherwise (lost at sea, connection lost or
+ *       interrupted). In every 0 case the island socket is closed.
+ ***********************************************/
 static int waitForDocking(tShip *pstShip, const char *psIsland) {
     struct pollfd astFds[1];
     tFrame stFrame;
@@ -342,7 +464,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
 
         if (nRet < 0) {
             // EINTR = a signal arrived (CTRL+C); anything else is a real error
-            //pstShip->nShouldExit = 1;
+            pstShip->nShouldExit = 1;
             closeSocket(&pstShip->nIslandFd);
             return 0;
         }
@@ -369,26 +491,35 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
         nNextRation += RATION_INTERVAL_MS;
 
         psMsg = NULL;
-        if (asprintf(&psMsg, "\n>>> The crew consumes another ration.\nProvisions remaining: %d kg\n",
-                     totalProvisions(pstShip)) < 0) {
+        if (asprintf(&psMsg, "\n>>> The crew consumes another ration.\nProvisions remaining: %d kg\n", totalProvisions(pstShip)) < 0) {
             psMsg = NULL;
         }
         printAndFree(psMsg);
 
         if (totalProvisions(pstShip) <= 0) {
             psMsg = NULL;
-            if (asprintf(&psMsg, "\nThe crew has run out of provisions.\nOdysseus %s has been lost at sea.\n",
-                         pstShip->stConfig.psName) < 0) {
+            if (asprintf(&psMsg, "\nThe crew has run out of provisions.\nOdysseus %s has been lost at sea.\n", pstShip->stConfig.psName) < 0) {
                 psMsg = NULL;
             }
             printAndFree(psMsg);
             closeSocket(&pstShip->nIslandFd);
-            //pstShip->nShouldExit = 1;
+            pstShip->nShouldExit = 1;
             return 0;
         }
     }
 }
 
+/***********************************************
+ * @Name: cmdSail
+ * @Def: SAIL <island>. From Ithaca only the starting island (Aeaea) is
+ *       valid; from an island, only a known direct route. Leaves the current
+ *       port, connects to the destination and announces the arrival. If the
+ *       port is full, waits offshore (see waitForDocking).
+ * @Arg: In/Out: pstShip ship state
+ *       In: nArgc unused
+ *       In: ppsArgv ppsArgv[0] = destination island
+ * @Ret: 0 if the ship docked, -1 otherwise (message already printed).
+ ***********************************************/
 int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
 
@@ -435,7 +566,8 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
             psMsg = NULL;
         }
         printAndFree(psMsg);
-        return -1;                          // at sea; psLocation still holds the last port
+        // at sea, psLocation still holds the last port
+        return -1;
     }
 
     if (sendTextFrame(nFd, TYPE_ISLAND_ARRIVE, FLAG_REQUEST, pstShip->stConfig.psName) != 0
@@ -445,7 +577,7 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return -1;
     }
     frameDataToString(&stReply, sData, sizeof(sData));
-    if (stReply.ucFlags != FLAGS_OK) {      // data is the reason
+    if (stReply.ucFlags != FLAGS_OK) {
         sayError(sData);
         closeSocket(&nFd);
         return -1;
@@ -486,6 +618,14 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
 //##### SHOP ACTIONS
 
+/***********************************************
+ * @Name: cmdListMarket
+ * @Def: LIST MARKET. Requests the island's market and prints one line per
+ *       product plus the final map entry, reading exactly Total frames.
+ * @Arg: In: pstShip ship state (must be docked)
+ *       In: nArgc, ppsArgv unused
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
 int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
     (void)ppsArgv;
@@ -513,7 +653,7 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         }
         frameDataToString(&stFrame, sData, sizeof(sData));
 
-        if (stFrame.ucFlags != FLAGS_OK) {              // error: data is the reason
+        if (stFrame.ucFlags != FLAGS_OK) {
             sayError(sData);
             return -1;
         }
@@ -569,17 +709,36 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
 /* ---------- trading helpers ---------- */
 
+/***********************************************
+ * @Name: isDocked
+ * @Def: Checks whether the ship is connected to an island (not Ithaca).
+ * @Arg: In: pstShip ship state
+ * @Ret: 1 if docked at an island, 0 otherwise.
+ ***********************************************/
 static int isDocked(const tShip *pstShip) {
     return pstShip->nIslandFd >= 0 && pstShip->psLocation != NULL
            && strcasecmp(pstShip->psLocation, "Ithaca") != 0;
 }
 
+/***********************************************
+ * @Name: islandLost
+ * @Def: Reports a lost island connection and closes the socket.
+ * @Arg: In/Out: pstShip ship state
+ * @Ret: Always -1, so callers can write "return islandLost(pstShip);".
+ ***********************************************/
 static int islandLost(tShip *pstShip) {
     printF("Error: connection to the island lost.\n");
     closeSocket(&pstShip->nIslandFd);
     return -1;
 }
 
+/***********************************************
+ * @Name: findCargo
+ * @Def: Looks up a product in the cargo (case-insensitive).
+ * @Arg: In: pstShip ship state
+ *       In: psName product name
+ * @Ret: Index of the product in the cargo, or -1 if not carried.
+ ***********************************************/
 static int findCargo(const tShip *pstShip, const char *psName) {
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems; i++) {
         if (strcasecmp(pstShip->stConfig.pstFoodSupplies[i].psProduct, psName) == 0) {
@@ -589,7 +748,15 @@ static int findCargo(const tShip *pstShip, const char *psName) {
     return -1;
 }
 
-// Adds kilograms to the cargo, creating the entry if the ship doesn't carry the product yet.
+/***********************************************
+ * @Name: addCargo
+ * @Def: Adds kilograms of a product to the cargo, creating a new entry if
+ *       the ship does not carry it yet.
+ * @Arg: In/Out: pstShip ship state
+ *       In: psName product name
+ *       In: nKg kilograms to add
+ * @Ret: 0 on success, -1 if memory could not be allocated.
+ ***********************************************/
 static int addCargo(tShip *pstShip, const char *psName, int nKg) {
     int nIdx = findCargo(pstShip, psName);
     tFood *pstNew;
@@ -616,8 +783,17 @@ static int addCargo(tShip *pstShip, const char *psName, int nKg) {
     return 0;
 }
 
-// Silent LIST MARKET: finds the price of one product.
-// Returns 1 = found, 0 = the island doesn't list it, -1 = failure (message already printed).
+/***********************************************
+ * @Name: queryPrice
+ * @Def: Silent LIST MARKET used before buying: reads the whole market
+ *       (every frame, so none is left in the socket) and keeps the price of
+ *       one product. Lets the ship check it can afford a purchase before
+ *       asking the island, which knows nothing about the ship's gold.
+ * @Arg: In/Out: pstShip ship state (must be docked)
+ *       In: psProduct product to look for
+ *       Out: pnPrice price per kilogram, if found
+ * @Ret: 1 if found, 0 if the island does not sell it, -1 on error.
+ ***********************************************/
 static int queryPrice(tShip *pstShip, const char *psProduct, int *pnPrice) {
     tFrame stFrame;
     char sData[FRAME_DATA_SIZE + 1];
@@ -660,9 +836,17 @@ static int queryPrice(tShip *pstShip, const char *psProduct, int *pnPrice) {
     return nFound;
 }
 
-// Sends "<product>&<amount>" and reads the single reply. Returns 0, or -1 (message printed).
-static int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProduct,
-                        int nAmount, tFrame *pstReply) {
+/***********************************************
+ * @Name: tradeRequest
+ * @Def: Sends a BUY or SELL request ("<product>&<amount>") and reads the reply.
+ * @Arg: In/Out: pstShip ship state (must be docked)
+ *       In: ucType TYPE_BUY or TYPE_SELL
+ *       In: psProduct product name
+ *       In: nAmount kilograms
+ *       Out: pstReply reply frame from the island
+ * @Ret: 0 if a reply was received, -1 on error (message already printed).
+ ***********************************************/
+static int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProduct, int nAmount, tFrame *pstReply) {
     char *psData = NULL;
     int nLen = asprintf(&psData, "%s&%d", psProduct, nAmount);
     int nRet;
@@ -679,7 +863,16 @@ static int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProd
     return 0;
 }
 
-// Parses "OK&<Product>&<Amount>&<Money>". Returns 0 or -1.
+/***********************************************
+ * @Name: parseTradeReply
+ * @Def: Splits a successful trade reply "OK&<Product>&<Amount>&<Money>".
+ *       The pointers returned point into psData, which is modified.
+ * @Arg: In/Out: psData reply data, modified in place
+ *       Out: ppsProduct product name, as written by the island
+ *       Out: pnAmount kilograms traded
+ *       Out: pnMoney cost (BUY) or income (SELL)
+ * @Ret: 0 on success, -1 if the reply is malformed.
+ ***********************************************/
 static int parseTradeReply(char *psData, char **ppsProduct, int *pnAmount, int *pnMoney) {
     char *psOk = strtok(psData, "&");
     char *psAmount;
@@ -698,6 +891,16 @@ static int parseTradeReply(char *psData, char **ppsProduct, int *pnAmount, int *
 
 /* ---------- BUY / SELL ---------- */
 
+/***********************************************
+ * @Name: cmdBuy
+ * @Def: BUY <product> <amount>. Checks the price first so the purchase is
+ *       only requested if the ship can afford it, then buys and adds the
+ *       food to the cargo.
+ * @Arg: In/Out: pstShip ship state (must be docked)
+ *       In: nArgc unused
+ *       In: ppsArgv [0] = product, [1] = amount in kilograms
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
 int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
 
@@ -728,7 +931,7 @@ int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         sayError("the island does not sell that product");
         return -1;
     }
-    if (nAmount > pstShip->nMoney / nPrice) {           // same as nAmount * nPrice > nMoney, no overflow
+    if (nAmount > pstShip->nMoney / nPrice) { // same as nAmount * nPrice > nMoney, no overflow
         printF("Error: not enough gold.\n");
         return -1;
     }
@@ -738,7 +941,7 @@ int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
     frameDataToString(&stReply, sData, sizeof(sData));
     if (stReply.ucFlags != FLAGS_OK) {
-        sayError(sData);                                // reason from the island
+        sayError(sData);
         return -1;
     }
     if (parseTradeReply(sData, &psProduct, &nBoughtKg, &nCost) < 0) {
@@ -758,6 +961,15 @@ int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     return 0;
 }
 
+/***********************************************
+ * @Name: cmdSell
+ * @Def: SELL <product> <amount>. Checks the cargo holds enough of the
+ *       product, sells it and adds the income to the ship's gold.
+ * @Arg: In/Out: pstShip ship state (must be docked)
+ *       In: nArgc unused
+ *       In: ppsArgv [0] = product, [1] = amount in kilograms
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
 int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
 
@@ -810,6 +1022,13 @@ int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     return 0;
 }
 
+/***********************************************
+ * @Name: addKnownIsland
+ * @Def: Adds an island learned from a map, unless it is already known.
+ * @Arg: In/Out: pstShip ship state
+ *       In: psName, psIp, nPort island name and address
+ * @Ret: 0 on success or if already known, -1 if memory could not be allocated.
+ ***********************************************/
 static int addKnownIsland(tShip *pstShip, const char *psName, const char *psIp, int nPort) {
     if (findKnownIsland(pstShip, psName) != NULL) {
         return 0;
@@ -835,6 +1054,13 @@ static int addKnownIsland(tShip *pstShip, const char *psName, const char *psIp, 
     return 0;
 }
 
+/***********************************************
+ * @Name: addKnownRoute
+ * @Def: Adds a bidirectional route between two islands, unless already known.
+ * @Arg: In/Out: pstShip ship state
+ *       In: psA, psB the two islands
+ * @Ret: 1 if the route is new, 0 if already known, -1 on memory error.
+ ***********************************************/
 static int addKnownRoute(tShip *pstShip, const char *psA, const char *psB) {
     if (isDirectRoute(pstShip, psA, psB)) {
         return 0;
@@ -859,6 +1085,17 @@ static int addKnownRoute(tShip *pstShip, const char *psA, const char *psB) {
     return 1;
 }
 
+/***********************************************
+ * @Name: cmdBuyMap
+ * @Def: BUY MAP 1. Buys the local map of the docked island (50 gold) and
+ *       adds every route it contains, with the neighbours' addresses, to
+ *       the ship's known map. Buying the same map again costs gold again
+ *       but adds nothing new.
+ * @Arg: In/Out: pstShip ship state (must be docked)
+ *       In: nArgc number of arguments
+ *       In: ppsArgv ppsArgv[0] = amount (only 1 is valid)
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
 int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     tFrame stFrame;
     char sData[FRAME_DATA_SIZE + 1];
@@ -948,6 +1185,15 @@ int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     return 0;
 }
 
+/***********************************************
+ * @Name: cmdMap
+ * @Def: MAP. Local command (no frames). Converts the ship's known islands
+ *       and routes into the array SPHRAGIS expects, with every route listed
+ *       for both of its islands, and lets SPHRAGIS draw it.
+ * @Arg: In: pstShip ship state
+ *       In: nArgc, ppsArgv unused
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
 int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
     (void)ppsArgv;
@@ -1021,6 +1267,14 @@ int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     return nOk ? 0 : -1;
 }
 
+/***********************************************
+ * @Name: cmdStatus
+ * @Def: STATUS. Local command (no frames). Prints gold, cargo, total
+ *       provisions, active voyage and current location.
+ * @Arg: In: pstShip ship state
+ *       In: nArgc, ppsArgv unused
+ * @Ret: Always 0.
+ ***********************************************/
 int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
     (void)ppsArgv;

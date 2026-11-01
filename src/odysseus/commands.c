@@ -50,19 +50,19 @@ int tokenizeLine(char *psLine, char *argv[], int nMaxTokens) {
     return nArgc;
 }
 
-//changed
 /***********************************************
  *
  * @Name: findCommand
  * @Def: Matches tokenized input words against available registered commands.
- * @Arg: In: ppsTokens array of token strings
+ * @Arg: In: pstCmds command table
+ *       In: nNumCmds number of entries in pstCmds
+ *       In: ppsTokens array of token strings
  *       In: nTokenCount total number of input tokens
- *       Out: pnNameWords pointer to store matching command word count (1 or 2)
- * @Ret: Returns pointer to matched tCommand structure, or NULL if non-existent.
+ *       Out: pnNameWords number of tokens that form the command name (1 or 2)
+ * @Ret: Returns a pointer to the matched entry, or NULL if no command matches.
  *
  ***********************************************/
-static const tCommand *findCommand(const tCommand *pstCmds, int nNumCmds,
-                                   char *ppsTokens[], int nTokenCount, int *pnNameWords) {
+static const tCommand *findCommand(const tCommand *pstCmds, int nNumCmds, char *ppsTokens[], int nTokenCount, int *pnNameWords) {
     for (int i = 0; i < nNumCmds; i++) {
         if (pstCmds[i].psWord2 != NULL && nTokenCount >= 2 &&
             strcasecmp(ppsTokens[0], pstCmds[i].psWord1) == 0 &&
@@ -81,7 +81,19 @@ static const tCommand *findCommand(const tCommand *pstCmds, int nNumCmds,
     return NULL;
 }
 
-
+/***********************************************
+ *
+ * @Name: executeCommand
+ * @Def: Calls the handler of an already validated command. Each handler
+ *       checks whether the command makes sense in the ship's current state
+ *       and prints its own output.
+ * @Arg: In/Out: pstShip ship state the command acts on
+ *       In: id identifier of the command to run
+ *       In: nArgc number of arguments
+ *       In: ppsArgs arguments, without the command name
+ * @Ret: None.
+ *
+ ***********************************************/
 static void executeCommand(tShip *pstShip, tCmdId id, int nArgc, char *ppsArgs[]) {
     switch (id) {
         case CMD_CONNECT_ITHACA: cmdConnectIthaca(pstShip, nArgc, ppsArgs); break;
@@ -100,7 +112,6 @@ static void executeCommand(tShip *pstShip, tCmdId id, int nArgc, char *ppsArgs[]
     }
 }
 
-//changed
 /***********************************************
  *
  * @Name: processLine

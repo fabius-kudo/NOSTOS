@@ -1,12 +1,27 @@
+/***********************************************
+ *
+ * @File : socket_utils.c
+ * @Purpose : TCP socket helpers shared by Odysseus, Ithaca and Island:
+ *            opening a listening socket for the servers, accepting clients,
+ *            connecting to a server and closing sockets safely. Addresses
+ *            always come from the configuration files, never from localhost.
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 1/11/26
+ *
+ ***********************************************/
+
 #include "socket_utils.h"
-#include <errno.h>
 
 /***********************************************
+ *
  * @Name: createServerSocket
- * @Def: Creates a TCP socket bound to the given IP and port, ready to accept.
- * @Ret: Listening fd, or -1 on error.
+ * @Def: Creates a TCP socket bound to the given IP and port and starts
+ *       listening, so the server can accept clients.
+ * @Arg: In: psIp IPv4 address
+ *       In: nPort port to listen on
+ * @Ret: Listening socket, or -1 on error with errno set to the cause.
+ *
  ***********************************************/
-//TODO: idk if we need this
 int createServerSocket(const char *psIp, int nPort) {
     struct sockaddr_in stAddr;
     int nOpt = 1;
@@ -43,18 +58,26 @@ int createServerSocket(const char *psIp, int nPort) {
 }
 
 /***********************************************
+ *
  * @Name: acceptClient
- * @Def: Waits for a client connection.
- * @Ret: Client fd, or -1 on error (errno == EINTR if CTRL+C interrupted it).
+ * @Def: Blocks until a client connects to the listening socket.
+ * @Arg: In: nServerFd socket returned by createServerSocket
+ * @Ret: Socket connected to the new client, or -1 on error.
+ *
  ***********************************************/
 int acceptClient(int nServerFd) {
     return accept(nServerFd, NULL, NULL);
 }
 
 /***********************************************
+ *
  * @Name: connectToServer
- * @Def: Opens a TCP connection to the given IP and port.
- * @Ret: Connected fd, or -1 on error.
+ * @Def: Opens a TCP connection to a server. Used by Odysseus to reach Ithaca
+ *       and the islands.
+ * @Arg: In: psIp IPv4 address
+ *       In: nPort server port
+ * @Ret: Connected socket, or -1 on error with errno set to the cause.
+ *
  ***********************************************/
 int connectToServer(const char *psIp, int nPort) {
     struct sockaddr_in stAddr;
@@ -82,8 +105,14 @@ int connectToServer(const char *psIp, int nPort) {
 }
 
 /***********************************************
+ *
  * @Name: closeSocket
- * @Def: Closes a socket and sets it to -1 so it can't be closed twice.
+ * @Def: Closes a socket if it is open and sets it to -1. The -1 marks the
+ *       socket as closed everywhere it is checked ("fd >= 0" means
+ *       connected) and makes a second call harmless.
+ * @Arg: In/Out: pnFd socket to close
+ * @Ret: None.
+ *
  ***********************************************/
 void closeSocket(int *pnFd) {
     if (*pnFd >= 0) {

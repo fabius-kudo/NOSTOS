@@ -1,10 +1,21 @@
+/***********************************************
+ *
+ * @File : protocol.h
+ * @Purpose : Header file for frame handling in the Nostos protocol.
+ * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
+ * @Date : 3/10/26
+ *
+ ***********************************************/
+
 #ifndef CODE_PROTOCOL_H
 #define CODE_PROTOCOL_H
 
+// System Includes
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
 
+// Constant Declarations
 #define FRAME_SIZE      256
 #define FRAME_DATA_SIZE 253
 
@@ -35,6 +46,7 @@
 #define FLAGS_OK      (FLAG_RESPONSE)
 #define FLAGS_ERR     (FLAG_RESPONSE | FLAG_ERROR) //TODO: what dis mean
 
+// Custom Type Definitions
 typedef struct {
     unsigned char ucType;
     unsigned char ucFlags;
