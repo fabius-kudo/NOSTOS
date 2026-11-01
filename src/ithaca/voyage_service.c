@@ -46,7 +46,7 @@ static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     pstSession->nIdentified = 1;
 
     sendTextFrame(pstSession->nFd, TYPE_CONNECT_ITHACA, FLAGS_OK, "OK");
-    if (asprintf(&psMsg, "\n>>> %s connected to Ithaca.\n", pstSession->psName) < 0) {
+    if (asprintf(&psMsg, ">>> %s connected to Ithaca.\n", pstSession->psName) < 0) {
         psMsg = NULL;
     }
     printAndFree(psMsg);
