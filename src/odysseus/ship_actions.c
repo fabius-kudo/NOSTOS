@@ -342,7 +342,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
 
         if (nRet < 0) {
             // EINTR = a signal arrived (CTRL+C); anything else is a real error
-            //pstShip->nShouldExit = 1;
+            pstShip->nShouldExit = 1;
             closeSocket(&pstShip->nIslandFd);
             return 0;
         }
@@ -383,7 +383,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
             }
             printAndFree(psMsg);
             closeSocket(&pstShip->nIslandFd);
-            //pstShip->nShouldExit = 1;
+            pstShip->nShouldExit = 1;
             return 0;
         }
     }

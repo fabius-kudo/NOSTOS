@@ -20,6 +20,7 @@
 #include "island_service.h"
 #include "socket_utils.h"
 #include "island_stock.h"
+#include "custom_io.h"
 
 static volatile sig_atomic_t gnStop = 0;
 
@@ -55,7 +56,7 @@ int main(int argc, char *argv[]) {
     struct sigaction stAct;
 
     if (argc != 3) {
-        write(STDERR_FILENO, "Usage: ./island <config.dat> <stock.db>\n", strlen("Usage: ./island <config.dat> <stock.db>\n"));
+        printF("Usage: ./island <config.dat> <stock.db>\n");
         exit(EXIT_FAILURE);
     }
 
@@ -70,28 +71,33 @@ int main(int argc, char *argv[]) {
     pstStock = parseStock(argv[2], &nNumProducts);
 
     if (filterRoutes(&stIsland) < 0 || portInit(&stPort, stIsland.nMaxCapacity) < 0) {
-        write(STDERR_FILENO, "Error: invalid island configuration\n", strlen("Error: invalid island configuration\n"));
+        printF("Error: invalid island configuration\n");
         freeIsland(stIsland);
         free(pstStock);
         exit(EXIT_FAILURE);
     }
 
     //### stock setup
-    if (stockInit(&stStock, pstStock, nNumProducts, argv[2]) < 0) { 
-        //TODO: add other frees n stuff
+    if (stockInit(&stStock, pstStock, nNumProducts, argv[2]) < 0) {
+        portDestroy(&stPort);
+        freeIsland(stIsland);
+        free(pstStock);
         exit(EXIT_FAILURE);
     }
-    pstStock = NULL; 
+    pstStock = NULL;
 
     //####### 'server' setup
     nServerFd = createServerSocket(stIsland.psIpAddress, stIsland.nPort);
     if (nServerFd < 0) {
-        int nLen = asprintf(&psErr, "Error: Failed to create server socket on %s:%d (%s)\n",
+        nLen = asprintf(&psErr, "Error: Failed to create server socket on %s:%d (%s)\n",
                  stIsland.psIpAddress, stIsland.nPort, strerror(errno));
-        write(STDOUT_FILENO, psErr, nLen);
+        if (nLen >= 0) {
+            write(STDOUT_FILENO, psErr, nLen);
+            free(psErr);
+        }
         portDestroy(&stPort);
+        stockDestroy(&stStock);
         freeIsland(stIsland);
-        free(pstStock);
         exit(EXIT_FAILURE);
     }
 
@@ -124,8 +130,7 @@ int main(int argc, char *argv[]) {
         pstSession->pstPort = &stPort;
         pstSession->psIslandName = stIsland.psName;
         pstSession->eState = SHIP_NONE;
-
-        pstSession->pstStock = &stStock;    
+        pstSession->pstStock = &stStock;
         pstSession->pstIsland = &stIsland;
 
         pthread_t nThreadId;
@@ -137,16 +142,16 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    portClose(&stPort);  // wakes queued ships
+    // free all island related resources
+    portClose(&stPort);
     nLen = asprintf(&psBuf, "\n%s closes its port.\n", stIsland.psName);
     if (nLen >= 0) {
         write(STDOUT_FILENO, psBuf, nLen);
         free(psBuf);
     }
 
-    // TODO step 8: shutdown() the active client fds and join the ship threads before
-    // destroying the port, so no thread is still using the mutex or the semaphore.
-    portDestroy(&stPort);                       // removes the System V semaphore from the kernel
+    // removes the semaphore from the kernel
+    portDestroy(&stPort);
     closeSocket(&nServerFd);
     stockDestroy(&stStock);
     freeIsland(stIsland);
