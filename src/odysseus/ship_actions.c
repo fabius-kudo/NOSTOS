@@ -87,6 +87,27 @@ void releaseShip(tShip *pstShip) {
     pstShip->nIslandFd = -1;
 }
 
+static void leaveCurrentPort(tShip *pstShip) {
+    tFrame stReply;
+    int *pnFd;
+    unsigned char ucType;
+
+    if (pstShip->nIthacaFd >= 0) {
+        pnFd = &pstShip->nIthacaFd;
+        ucType = TYPE_DISCONNECT;
+    } else if (pstShip->nIslandFd >= 0) {
+        pnFd = &pstShip->nIslandFd;
+        ucType = TYPE_ISLAND_LEAVE;
+    } else {
+        return;                             // already at sea
+    }
+
+    if (sendFrame(*pnFd, ucType, FLAG_REQUEST, NULL, 0) == 0) {
+        recvFrame(*pnFd, &stReply);         // wait for the confirmation; we leave either way
+    }
+    closeSocket(pnFd);
+}
+
 /* ---------- commands ---------- */
 
 int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
@@ -101,15 +122,25 @@ int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return 0;
     }
 
+    if (pstShip->nIslandFd >= 0) {
+    char *psMsg = NULL;
+    if (asprintf(&psMsg, "Leaving %s...\n",
+                 pstShip->psLocation ? pstShip->psLocation : "port") < 0) {
+        psMsg = NULL;
+    }
+    sayAndFree(psMsg);
+    leaveCurrentPort(pstShip);
+}
+
     int nFd = connectToServer(pstShip->stConfig.psIthacaIp, pstShip->stConfig.nIthacaPort);
     if (nFd < 0) {
         say("Error: cannot reach Ithaca.\n");
         return -1;
     }
 
-    if (sendFrame(nFd, TYPE_CONNECT_ITHACA, FLAG_REQUEST,
-                  pstShip->stConfig.psName, (int)strlen(pstShip->stConfig.psName)) != 0
-        || recvFrame(nFd, &stReply) != 1) {
+    if (sendFrame(nFd, TYPE_CONNECT_ITHACA, FLAG_REQUEST, 
+            pstShip->stConfig.psName, (int)strlen(pstShip->stConfig.psName)) != 0
+            || recvFrame(nFd, &stReply) != 1) {
         say("Error: connection to Ithaca lost.\n");
         closeSocket(&nFd);
         return -1;
@@ -280,27 +311,6 @@ static int isDirectRoute(const tShip *pstShip, const char *psFrom, const char *p
     return 0;
 }
 
-static void leaveCurrentPort(tShip *pstShip) {
-    tFrame stReply;
-    int *pnFd;
-    unsigned char ucType;
-
-    if (pstShip->nIthacaFd >= 0) {
-        pnFd = &pstShip->nIthacaFd;
-        ucType = TYPE_DISCONNECT;
-    } else if (pstShip->nIslandFd >= 0) {
-        pnFd = &pstShip->nIslandFd;
-        ucType = TYPE_ISLAND_LEAVE;
-    } else {
-        return;                             // already at sea
-    }
-
-    if (sendFrame(*pnFd, ucType, FLAG_REQUEST, NULL, 0) == 0) {
-        recvFrame(*pnFd, &stReply);         // wait for the confirmation; we leave either way
-    }
-    closeSocket(pnFd);
-}
-
 static int totalProvisions(const tShip *pstShip) {
     int nTotal = 0;
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems; i++) {
@@ -346,6 +356,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
 
         if (nRet < 0) {
             // EINTR = a signal arrived (CTRL+C); anything else is a real error
+            pstShip->nShouldExit = 1;
             closeSocket(&pstShip->nIslandFd);
             return 0;
         }
@@ -357,8 +368,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
                 return 0;
             }
             frameDataToString(&stFrame, sData, sizeof(sData));
-            if (stFrame.ucType == TYPE_ISLAND_ARRIVE && stFrame.ucFlags == FLAGS_OK
-                && strcmp(sData, "DOCKED") == 0) {
+            if (stFrame.ucType == TYPE_ISLAND_ARRIVE && stFrame.ucFlags == FLAGS_OK && strcmp(sData, "DOCKED") == 0) {
                 psMsg = NULL;
                 if (asprintf(&psMsg, "\n>>> %s has granted access to the port.\n", psIsland) < 0) {
                     psMsg = NULL;
@@ -387,6 +397,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
             }
             sayAndFree(psMsg);
             closeSocket(&pstShip->nIslandFd);
+            pstShip->nShouldExit = 1;
             return 0;
         }
     }
@@ -541,9 +552,20 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         char *psLine = NULL;
 
         if (nIndex == 1) {
-            asprintf(&psLine, "--- %s MARKET ---\n" , pstShip->psLocation);
+            char *psUpper = dupString(pstShip->psLocation);
+            if (psUpper != NULL) {
+                for (int i = 0; psUpper[i] != '\0'; i++) {
+                    psUpper[i] = (char)toupper((unsigned char)psUpper[i]);
+                }
+            }
+            psLine = NULL;
+            if (asprintf(&psLine, "--- %s MARKET ---\n", psUpper ? psUpper : pstShip->psLocation) < 0) {
+                psLine = NULL;
+            }
+            free(psUpper);
             sayAndFree(psLine);
         }
+        psLine = NULL;
 
         if (strcmp(psName, "MAP") == 0) {
             if (asprintf(&psLine, "%-32s%s gold\n", "Map", psPrice) < 0) {
@@ -703,10 +725,6 @@ int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     int nCost = 0;
     int nRes;
 
-    if (strcasecmp(ppsArgv[0], "MAP") == 0) {
-        say("BUY MAP is not implemented yet.\n");       // TODO: frame type 0x14
-        return -1;
-    }
     if (!isDocked(pstShip)) {
         say("Error: you are not docked at any island.\n");
         return -1;
@@ -1066,7 +1084,7 @@ int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         }
         sayAndFree(psMsg);
     } else {
-        say("\nCurrent voyage: None\nReward: None\n");
+        say("Current voyage: None\nReward: None\n");
     }
 
     psMsg = NULL;

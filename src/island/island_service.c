@@ -40,12 +40,14 @@ static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
         return -1;
     }
 
+    logEvent(">>> %s approaching %s.\n", pstSession->psShipName, pstSession->psIslandName);
+
     if (portArrive(pstSession->pstPort)) {
         pstSession->eState = SHIP_DOCKED;
-        if (sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "OK") != 0) {
+        if (sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "DOCKED") != 0) {
             return -1;                  // serveShip releases the dock
         }
-        logEvent(">>> %s docked at %s.\n", pstSession->psShipName, pstSession->psIslandName);
+        logEvent(">>> %s entered the port.\n", pstSession->psShipName, NULL);
         return 0;
     }
 
@@ -59,7 +61,7 @@ static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
         pstSession->eState = SHIP_GONE;
         return -1;
     }
-    logEvent(">>> %s is waiting to enter %s.\n", pstSession->psShipName, pstSession->psIslandName);
+    logEvent(">>> Port full. %s waiting offshore in the FIFO queue.\n", pstSession->psShipName, NULL);
 
     if (portWaitTurn(pstSession->pstPort) != 0) {
         pstSession->eState = SHIP_GONE; // port closing
@@ -71,7 +73,7 @@ static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
         return -1;
     }
     pstSession->eState = SHIP_DOCKED;
-    logEvent(">>> %s docked at %s.\n", pstSession->psShipName, pstSession->psIslandName);
+    logEvent(">>> DOCKED sent to %s; he may enter the port.\n", pstSession->psShipName, NULL);
     return 0;
 }
 
@@ -83,7 +85,7 @@ static int handleLeave(tIslandSession *pstSession) {
     portLeave(pstSession->pstPort);
     pstSession->eState = SHIP_GONE;
     sendTextFrame(pstSession->nFd, TYPE_ISLAND_LEAVE, FLAGS_OK, "OK");
-    logEvent(">>> %s left %s.\n", pstSession->psShipName, pstSession->psIslandName);
+    logEvent(">>> %s has left.\n", pstSession->psShipName, NULL);
     return -1;
 }
 
@@ -103,6 +105,7 @@ static void handleBuyMap(tIslandSession *pstSession, const tFrame *pstFrame) {
 
     if (nTotal == 0) {
         sendTextFrame(pstSession->nFd, TYPE_BUY_MAP, FLAGS_OK, "OK&50&0");
+        logEvent(">>> %s bought the local map.\n", pstSession->psShipName, NULL);
         return;
     }
     for (int i = 0; i < nTotal; i++) {
@@ -262,6 +265,7 @@ void serveShip(tIslandSession *pstSession) {
     if (pstSession->eState == SHIP_DOCKED) {
         portLeave(pstSession->pstPort);
         pstSession->eState = SHIP_GONE;
+        logEvent(">>> %s has left.\n", pstSession->psShipName, NULL);
     }
     free(pstSession->psShipName);
     pstSession->psShipName = NULL;
