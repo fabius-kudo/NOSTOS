@@ -20,5 +20,6 @@
 
 char *readDynamic(int nFd, int nUntilNewline);   // reads until '\n' or EOF
 char *dupString(const char *psSource);  // heap copy of a string
+void printAndFree(char *psMsg);
 
 #endif  //CUSTOM_DYNAMIC_H

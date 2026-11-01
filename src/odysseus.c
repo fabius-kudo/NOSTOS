@@ -8,6 +8,7 @@
  ***********************************************/
 
 // System Includes
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,7 +17,7 @@
 #include <signal.h>
 
 // Project Includes
-#include "custom_dynamic.h"
+#include "custom_io.h"
 #include "commands.h"
 #include "ship_config.h"
 
