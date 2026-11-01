@@ -1,6 +1,8 @@
 #define _GNU_SOURCE
 #include "ship_actions.h"
 
+#define MAP_PRICE 50
+
 /* ---------- small output helpers ---------- */
 
 static void say(const char *psMsg) {
