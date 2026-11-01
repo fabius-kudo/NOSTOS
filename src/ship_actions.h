@@ -8,6 +8,7 @@
 #include <strings.h>
 #include <poll.h>
 #include <time.h>
+#include <ctype.h>
 
 #define RATION_INTERVAL_MS 5000
 #define RATION_KG 7

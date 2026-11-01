@@ -64,6 +64,7 @@ int main(int argc, char *argv[]) {
     int nNumVoyages = 0;
     int nLen = 0;
     char *psBuf = NULL;
+    char *psErr = NULL;
     tIthaca stIthaca;
     tVoyage *pstVoyages = NULL;
 
@@ -98,9 +99,9 @@ int main(int argc, char *argv[]) {
 
     int nServerFd = createServerSocket(stIthaca.psIpAddress, stIthaca.nPort);
     if (nServerFd < 0) {
-        char *err;
-        int len = asprintf(&err, "Error: Failed to create server socket on %s:%d (%s)\n",
+        int nLen = asprintf(&psErr, "Error: Failed to create server socket on %s:%d (%s)\n",
                  stIthaca.psIpAddress, stIthaca.nPort, strerror(errno));
+        write(STDOUT_FILENO, psErr, nLen);
         freeIthaca(&stIthaca);
         freeVoyages(pstVoyages, nNumVoyages);
         exit(EXIT_FAILURE);

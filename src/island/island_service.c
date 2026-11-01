@@ -98,7 +98,7 @@ static void handleBuyMap(tIslandSession *pstSession, const tFrame *pstFrame) {
         return;
     }
 
-    tIsland *pstIsland = pstSession->pstIsland;
+    const tIsland *pstIsland = pstSession->pstIsland;
     int nTotal = pstIsland->nNumRoutes;
 
     if (nTotal == 0) {

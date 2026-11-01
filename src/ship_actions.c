@@ -1015,7 +1015,7 @@ int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     return nOk ? 0 : -1;
 }
 
-void cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     (void)nArgc;
     (void)ppsArgv;
     char *psMsg = NULL;
@@ -1074,5 +1074,4 @@ void cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
     sayAndFree(psMsg);
     return 0;
-
 }
