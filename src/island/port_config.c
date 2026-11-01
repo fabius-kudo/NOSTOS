@@ -9,7 +9,6 @@
 
 #include "port_config.h"
 
-
 /***********************************************
  *
  * @Name: parseIsland
@@ -40,6 +39,7 @@ tIsland parseIsland(char *psIslandsPath) {
         exit(EXIT_FAILURE);
     }
 
+    // strtok changes the string it reads, so the lines are counted on a copy
     psBufCopy = dupString(psBuf);
     if (NULL == psBufCopy) {
         free(psBuf);
@@ -52,7 +52,7 @@ tIsland parseIsland(char *psIslandsPath) {
     while (psLine != NULL && strcmp(psLine, "--- ROUTES ---") != 0) {
         psLine = strtok(NULL, "\n");
     }
-    if (psLine != NULL) {                    
+    if (psLine != NULL) {
         psLine = strtok(NULL, "\n");
         while (psLine != NULL) {
             nCount++;
@@ -67,7 +67,9 @@ tIsland parseIsland(char *psIslandsPath) {
     stIsland.psIpAddress = dupString(strtok(NULL, " \n"));
     stIsland.nPort = atoi(strtok(NULL, " \n"));
     stIsland.nMaxCapacity = atoi(strtok(NULL, " \n"));
-    strtok(NULL, "\n");                  // consume the "--- ROUTES ---" line
+
+    // Consume the "--- ROUTES ---" line
+    strtok(NULL, "\n");
 
     stIsland.pstRoutes = malloc(sizeof(tRoute) * nCount);
     if (!stIsland.pstRoutes && nCount > 0) {
@@ -109,8 +111,8 @@ void freeIsland(tIsland stIsland) {
  *
  * @Name: parseStock
  * @Def: Reads binary stock file into a dynamically allocated array of products.
- * @Arg: In: psStockPath path to stock data file
- *       Out: pnNumProducts pointer to store total product count
+ * @Arg: In: stock_path path to stock data file
+ *       Out: num_products pointer to store total product count
  * @Ret: Returns array of tProduct structs, or NULL/exits on error.
  *
  ***********************************************/
@@ -127,7 +129,7 @@ tProduct *parseStock(char *stock_path, int *num_products) {
         exit(EXIT_FAILURE);
     }
 
-    
+    // The records are stored one after another: read until a whole one no longer fits
     while (read(nFd, &stTemp, sizeof(tProduct)) == (ssize_t)sizeof(tProduct)) {
         pstTmp = realloc(pstProducts, sizeof(tProduct) * (nCount + 1));
         if (!pstTmp) {
@@ -156,11 +158,12 @@ tProduct *parseStock(char *stock_path, int *num_products) {
 int filterRoutes(tIsland *pstIsland) {
     int nRes = 0;
     SPHRAGIS_Island stTmp;
-    
+
     stTmp.name = pstIsland->psName;
     stTmp.known_island_count = pstIsland->nNumRoutes;
     stTmp.known_islands = NULL;
 
+    //plain array with the names of the routes
     if (pstIsland->nNumRoutes > 0) {
         stTmp.known_islands = calloc(pstIsland->nNumRoutes, sizeof(char *));
         if (!stTmp.known_islands) return -1;
@@ -176,7 +179,8 @@ int filterRoutes(tIsland *pstIsland) {
     }
 
     nRes = SPHRAGIS_filter_island_configuration(&stTmp);
-    if (nRes < 0) {                                   // invalid island or array/count
+    // Invalid island or array/count
+    if (nRes < 0) {
         for (int i = 0; i < pstIsland->nNumRoutes; i++) free(stTmp.known_islands[i]);
         free(stTmp.known_islands);
         return -1;
@@ -186,15 +190,18 @@ int filterRoutes(tIsland *pstIsland) {
     int k = 0;
     for (int i = 0; i < pstIsland->nNumRoutes; i++) {
         if (k < nRes && strcmp(stTmp.known_islands[k], pstIsland->pstRoutes[i].psName) == 0) {
-            pstIsland->pstRoutes[k++] = pstIsland->pstRoutes[i];   // compact in place
+            // Compact in place
+            pstIsland->pstRoutes[k++] = pstIsland->pstRoutes[i];
         } else {
-            free(pstIsland->pstRoutes[i].psName);              // rejected route
+            // Rejected route
+            free(pstIsland->pstRoutes[i].psName);
             free(pstIsland->pstRoutes[i].psIpAddress);
         }
     }
     pstIsland->nNumRoutes = nRes;
 
-    for (int i = 0; i < nRes; i++) free(stTmp.known_islands[i]);   // our remaining copies
+    // Free our remaining copies of the names
+    for (int i = 0; i < nRes; i++) free(stTmp.known_islands[i]);
     free(stTmp.known_islands);
     return nRes;
 }
