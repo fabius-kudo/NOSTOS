@@ -21,7 +21,7 @@
 #include "commands.h"
 #include "ship_config.h"
 
-static volatile int gnStop = 0;
+int gnStop = 0;
 
 /***********************************************
  *

@@ -17,7 +17,6 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <string.h>
-#include <errno.h>
 
 // Constant Declarations
 #define LISTEN_BACKLOG 16

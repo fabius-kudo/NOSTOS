@@ -57,7 +57,7 @@ build/ithaca.o: src/ithaca.c $(ITH)/voyage_config.h $(ITH)/voyage_service.h $(UT
 build/port_config.o: $(ISL)/port_config.c $(ISL)/port_config.h $(UTIL)/custom_io.h $(SPHRAGIS)/sphragis.h
 	gcc $(CFLAGS) -c $(ISL)/port_config.c -o build/port_config.o
 
-build/port_control.o: $(ISL)/port_control.c $(ISL)/port_control.h $(UTIL)/semaphore_v2.h
+build/port_control.o: $(ISL)/port_control.c $(ISL)/port_control.h $(UTIL)/protocol.h $(UTIL)/custom_io.h
 	gcc $(CFLAGS) -c $(ISL)/port_control.c -o build/port_control.o
 
 build/island_stock.o: $(ISL)/island_stock.c $(ISL)/island_stock.h $(ISL)/port_config.h $(UTIL)/custom_io.h

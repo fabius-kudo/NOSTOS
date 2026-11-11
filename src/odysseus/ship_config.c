@@ -73,10 +73,12 @@ int initShip(tShip *pstShip, tOdysseus stConfig) {
     pstShip->stConfig = stConfig;              // the ship now owns the config's strings
     pstShip->nMoney = stConfig.nInitialMoney;
 
-    pstShip->pstIslands = calloc(1, sizeof(tKnownIsland));
+    pstShip->pstIslands = malloc(sizeof(tKnownIsland));
     if (pstShip->pstIslands == NULL) {
         return -1;
     }
+    memset(pstShip->pstIslands, 0, sizeof(tKnownIsland));
+    
     pstShip->pstIslands[0].sName = dupString(stConfig.psIslandName);
     pstShip->pstIslands[0].sIp   = dupString(stConfig.psIslandIp);
     pstShip->pstIslands[0].nPort = stConfig.nIslandPort;

@@ -22,6 +22,13 @@
 #include "voyage_config.h"
 
 // Custom Type Definitions
+typedef enum {
+    ACCEPT_OK,
+    ACCEPT_ALREADY_HAVE_VOYAGE,
+    ACCEPT_NOT_FOUND,
+    ACCEPT_NOT_AVAILABLE,
+    ACCEPT_INTERNAL_ERROR
+} tAcceptResult;
 typedef struct {
     tVoyage *pstVoyages;
     int nNumVoyages;

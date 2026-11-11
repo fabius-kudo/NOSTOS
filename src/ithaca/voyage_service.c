@@ -23,7 +23,7 @@
  * @Ret: None.
  *
  ***********************************************/
-static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
+void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
     char sName[FRAME_DATA_SIZE + 1];
     char *psMsg = NULL;
 
@@ -63,7 +63,7 @@ static void handleConnect(tClientSession *pstSession, const tFrame *pstFrame) {
  * @Ret: None.
  *
  ***********************************************/
-static void handleDisconnect(tClientSession *pstSession) {
+void handleDisconnect(tClientSession *pstSession) {
     char *psMsg = NULL;
 
     if (!pstSession->nIdentified) {
@@ -95,7 +95,7 @@ static void handleDisconnect(tClientSession *pstSession) {
  * @Ret: None.
  *
  ***********************************************/
-static void handleListVoyages(tClientSession *pstSession) {
+void handleListVoyages(tClientSession *pstSession) {
     tVoyageStore *pstStore = pstSession->pstStore;
     tVoyage *pstAvail;
     char sData[FRAME_DATA_SIZE + 1];
@@ -145,6 +145,32 @@ static void handleListVoyages(tClientSession *pstSession) {
 
 /***********************************************
  *
+ * @Name: sendAcceptError
+ * @Def: Tells the Odysseus why its ACCEPT request was rejected.
+ * @Arg: In: pstSession session of the requesting client
+ *       In: eRes reason of the rejection
+ * @Ret: None.
+ *
+ ***********************************************/
+void sendAcceptError(tClientSession *pstSession, tAcceptResult eRes) {
+    switch (eRes) {
+        case ACCEPT_ALREADY_HAVE_VOYAGE:
+            sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "ALREADY_HAVE_VOYAGE");
+            break;
+        case ACCEPT_NOT_FOUND:
+            sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "VOYAGE_NOT_FOUND");
+            break;
+        case ACCEPT_NOT_AVAILABLE:
+            sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "VOYAGE_NOT_AVAILABLE");
+            break;
+        default:
+            sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "INTERNAL_ERROR");
+            break;
+    }
+}
+
+/***********************************************
+ *
  * @Name: handleAccept
  * @Def: Handles ACCEPT (0x03). Assigns the requested voyage to this Odysseus
  *       if it exists, is still available, and the ship holds no other
@@ -156,12 +182,12 @@ static void handleListVoyages(tClientSession *pstSession) {
  * @Ret: None.
  *
  ***********************************************/
-static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
+void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     tVoyageStore *pstStore = pstSession->pstStore;
     char sData[FRAME_DATA_SIZE + 1];
     char sReply[FRAME_DATA_SIZE + 1];
     char *psMsg = NULL;
-    const char *psError = NULL;
+    tAcceptResult eRes = ACCEPT_OK;
     tVoyage *pstVoyage = NULL;
     int nId, nLen = 0;
 
@@ -181,7 +207,7 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
 
         if (pstV->eState == VOYAGE_ASSIGNED && pstV->sOwner != NULL &&
             strcmp(pstV->sOwner, pstSession->psName) == 0) {
-            psError = "ALREADY_HAVE_VOYAGE";
+            eRes = ACCEPT_ALREADY_HAVE_VOYAGE;
             break;
         }
         if (pstV->nId == nId) {
@@ -189,15 +215,15 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
         }
     }
 
-    if (psError == NULL) {
+    if (eRes == ACCEPT_OK) {
         if (pstVoyage == NULL) {
-            psError = "VOYAGE_NOT_FOUND";
+            eRes = ACCEPT_NOT_FOUND;
         } else if (pstVoyage->eState != VOYAGE_AVAILABLE) {
-            psError = "VOYAGE_NOT_AVAILABLE";
+            eRes = ACCEPT_NOT_AVAILABLE;
         } else {
             char *psOwner = dupString(pstSession->psName);
             if (psOwner == NULL) {
-                psError = "INTERNAL_ERROR";
+                eRes = ACCEPT_INTERNAL_ERROR;
             } else {
                 free(pstVoyage->sOwner);
                 pstVoyage->sOwner = psOwner;
@@ -211,7 +237,7 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
                     pstVoyage->eState = VOYAGE_AVAILABLE;
                     free(pstVoyage->sOwner);
                     pstVoyage->sOwner = NULL;
-                    psError = "INTERNAL_ERROR";
+                    eRes = ACCEPT_INTERNAL_ERROR;
                 }
             }
         }
@@ -219,8 +245,9 @@ static void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
 
     pthread_mutex_unlock(&pstStore->stMutex);
 
-    if (psError != NULL) {
-        sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, psError);
+    // The answer is sent after releasing the lock
+    if (eRes != ACCEPT_OK) {
+        sendAcceptError(pstSession, eRes);
         return;
     }
 

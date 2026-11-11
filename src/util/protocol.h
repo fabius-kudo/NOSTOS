@@ -13,7 +13,6 @@
 // System Includes
 #include <unistd.h>
 #include <string.h>
-#include <errno.h>
 
 // Constant Declarations
 #define FRAME_SIZE      256

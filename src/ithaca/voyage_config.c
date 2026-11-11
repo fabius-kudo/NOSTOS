@@ -108,11 +108,12 @@ tVoyage *parseVoyages(char *psVoyagesPath, int *pnNumVoyages) {
     }
     free(psBufCopy);
 
-    pstVoyages = calloc(nCount, sizeof(tVoyage));
+    pstVoyages = malloc(sizeof(tVoyage) * nCount);
     if (!pstVoyages && nCount > 0) {
         write(STDERR_FILENO, "Error: malloc failed\n", strlen("Error: malloc failed\n"));
         exit(EXIT_FAILURE);
     }
+    memset(pstVoyages, 0, sizeof(tVoyage) * nCount);
 
     // Second pass: parse each line into a Voyage
     psTok = strtok(psBuf, " \n"); 

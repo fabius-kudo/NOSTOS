@@ -165,8 +165,9 @@ int filterRoutes(tIsland *pstIsland) {
 
     //plain array with the names of the routes
     if (pstIsland->nNumRoutes > 0) {
-        stTmp.known_islands = calloc(pstIsland->nNumRoutes, sizeof(char *));
+        stTmp.known_islands = malloc(pstIsland->nNumRoutes * sizeof(char *));
         if (!stTmp.known_islands) return -1;
+        memset(stTmp.known_islands, 0, pstIsland->nNumRoutes * sizeof(char *));
 
         for (int i = 0; i < pstIsland->nNumRoutes; i++) {
             stTmp.known_islands[i] = dupString(pstIsland->pstRoutes[i].psName);
