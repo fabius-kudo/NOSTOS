@@ -1200,12 +1200,13 @@ int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     int nCount = pstShip->nNumIslands;
     int nOk = 1;
-    SPHRAGIS_Island *pstMap = calloc(nCount, sizeof(SPHRAGIS_Island));
 
+    SPHRAGIS_Island *pstMap = malloc(nCount * sizeof(SPHRAGIS_Island));
     if (pstMap == NULL) {
         printE("Error: out of memory.\n");
         return -1;
     }
+    memset(pstMap, 0, nCount * sizeof(SPHRAGIS_Island));
 
     // Build one SPHRAGIS entry per island
     for (int i = 0; i < nCount && nOk; i++) {
