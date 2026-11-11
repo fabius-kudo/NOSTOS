@@ -18,16 +18,14 @@
 #include "port_config.h"
 
 // Custom Type Definitions
-typedef enum { SHIP_NONE, SHIP_QUEUED, SHIP_DOCKED, SHIP_GONE } tShipState;
-
 typedef struct {
     int nFd;
-    tPort *pstPort;             // shared: docks and queue
+    tPort *pstPort;             // shared: docks and waiting list
     tStock *pstStock;           // shared: protected by its own mutex
     const tIsland *pstIsland;   // shared, read-only after startup (routes for BUY MAP)
     const char *psIslandName;
     char *psShipName;           // heap copy, set on ARRIVE
-    tShipState eState;
+    tPortShip stShip;           // state of this ship in the port (use the port functions)
 } tIslandSession;
 
 //Prototypes

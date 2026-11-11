@@ -19,19 +19,59 @@
 
 /***********************************************
  *
+ * @Name: leavePort
+ * @Def: Takes the ship out of the port, whatever its state, and writes on
+ *       the island screen what happened.
+ * @Arg: In/Out: pstSession session of the ship
+ * @Ret: None.
+ *
+ ***********************************************/
+void leavePort(tIslandSession *pstSession) {
+    char *psNext = NULL;
+    char *psMsg = NULL;
+    tPortState eBefore;
+
+    // If the ship was docked, its dock is handed to the oldest waiting ship,
+    // which has already been sent DOCKED when this call returns
+    eBefore = portLeave(pstSession->pstPort, &pstSession->stShip, &psNext);
+
+    if (eBefore == PORT_DOCKED) {
+        if (asprintf(&psMsg, ">>> %s has left.\n", pstSession->psShipName) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
+    } else if (eBefore == PORT_QUEUED) {
+        if (asprintf(&psMsg, ">>> %s was lost while waiting; removed from the FIFO queue.\n", pstSession->psShipName) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
+    }
+
+    if (psNext != NULL) {
+        if (asprintf(&psMsg, ">>> DOCKED sent to %s; he may enter the port.\n", psNext) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
+        free(psNext);
+    }
+}
+
+/***********************************************
+ *
  * @Name: handleArrive
  * @Def: Handles the arrival of a ship: it docks at once if there is a free
- *       berth, otherwise it waits in the FIFO queue until one is handed to it.
+ *       dock, otherwise it is added to the FIFO list of waiting ships.
  * @Arg: In/Out: pstSession session of the ship
  *       In: pstFrame received arrival frame (data is the ship name)
  * @Ret: Returns 0 to keep serving the ship, -1 to end its session.
  *
  ***********************************************/
-static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
+int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
     char sName[FRAME_DATA_SIZE + 1];
     char *psMsg = NULL;
+    int nRes;
 
-    if (pstSession->eState != SHIP_NONE) {
+    if (portGetState(pstSession->pstPort, &pstSession->stShip) != PORT_OUT) {
         sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_ERR, "ALREADY_ARRIVED");
         return 0;
     }
@@ -52,13 +92,14 @@ static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
     }
     printAndFree(psMsg);
 
-    // portArrive takes a free berth or puts the ship in the queue
-    if (portArrive(pstSession->pstPort)) {
-        pstSession->eState = SHIP_DOCKED;
-        if (sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "DOCKED") != 0) {
-            //ship is gone
-            return -1;
-        }
+    // portArrive takes a free dock or adds the ship to the waiting list, and
+    // sends the answer (DOCKED or WAIT) itself
+    nRes = portArrive(pstSession->pstPort, &pstSession->stShip, pstSession->psShipName);
+    if (nRes < 0) {
+        // The ship is gone: serveShip takes it out of the port
+        return -1;
+    }
+    if (nRes == 1) {
         if (asprintf(&psMsg, ">>> %s entered the port.\n", pstSession->psShipName) < 0) {
             psMsg = NULL;
         }
@@ -66,34 +107,9 @@ static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
         return 0;
     }
 
-    // Port full: tell the ship to wait, sleep
-    pstSession->eState = SHIP_QUEUED;
-    if (sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "WAIT") != 0) {
-        // The place in the queue is already counted: it must be used and given back
-        if (portWaitTurn(pstSession->pstPort) == 0) {
-            portLeave(pstSession->pstPort);
-        }
-        pstSession->eState = SHIP_GONE;
-        return -1;
-    }
+    // Port full. The thread does not sleep: it goes back to reading the
+    // socket, and the ship that frees a dock will send the DOCKED
     if (asprintf(&psMsg, ">>> Port full. %s waiting offshore in the FIFO queue.\n", pstSession->psShipName) < 0) {
-        psMsg = NULL;
-    }
-    printAndFree(psMsg);
-
-    // Sleeps on the semaphore of the port
-    if (portWaitTurn(pstSession->pstPort) != 0) {
-        pstSession->eState = SHIP_GONE;
-        return -1;
-    }
-    if (sendTextFrame(pstSession->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "DOCKED") != 0) {
-        // The ship died while queued: pass the berth on to the next one
-        portLeave(pstSession->pstPort);
-        pstSession->eState = SHIP_GONE;
-        return -1;
-    }
-    pstSession->eState = SHIP_DOCKED;
-    if (asprintf(&psMsg, ">>> DOCKED sent to %s; he may enter the port.\n", pstSession->psShipName) < 0) {
         psMsg = NULL;
     }
     printAndFree(psMsg);
@@ -103,27 +119,20 @@ static int handleArrive(tIslandSession *pstSession, const tFrame *pstFrame) {
 /***********************************************
  *
  * @Name: handleLeave
- * @Def: Handles a docked ship leaving the port and frees its berth.
+ * @Def: Handles a docked ship leaving the port and frees its dock.
  * @Arg: In/Out: pstSession session of the ship
  * @Ret: Returns 0 to keep serving the ship, -1 to end its session.
  *
  ***********************************************/
-static int handleLeave(tIslandSession *pstSession) {
-    char *psMsg = NULL;
-
-    if (pstSession->eState != SHIP_DOCKED) {
+int handleLeave(tIslandSession *pstSession) {
+    if (portGetState(pstSession->pstPort, &pstSession->stShip) != PORT_DOCKED) {
         sendTextFrame(pstSession->nFd, TYPE_ISLAND_LEAVE, FLAGS_ERR, "NOT_DOCKED");
         return 0;
     }
 
-    // Gives the berth to the oldest queued ship
-    portLeave(pstSession->pstPort);
-    pstSession->eState = SHIP_GONE;
+    // Gives the dock to the oldest waiting ship
+    leavePort(pstSession);
     sendTextFrame(pstSession->nFd, TYPE_ISLAND_LEAVE, FLAGS_OK, "OK");
-    if (asprintf(&psMsg, ">>> %s has left.\n", pstSession->psShipName) < 0) {
-        psMsg = NULL;
-    }
-    printAndFree(psMsg);
     return -1;
 }
 
@@ -136,11 +145,16 @@ static int handleLeave(tIslandSession *pstSession) {
  * @Ret: None.
  *
  ***********************************************/
-static void handleBuyMap(tIslandSession *pstSession, const tFrame *pstFrame) {
+void handleBuyMap(tIslandSession *pstSession, const tFrame *pstFrame) {
     char sData[FRAME_DATA_SIZE + 1];
     char sReply[FRAME_DATA_SIZE + 1];
     char *psMsg = NULL;
     int nLen;
+
+    if (portGetState(pstSession->pstPort, &pstSession->stShip) != PORT_DOCKED) {
+        sendTextFrame(pstSession->nFd, TYPE_BUY_MAP, FLAGS_ERR, "NOT_DOCKED");
+        return;
+    }
 
     frameDataToString(pstFrame, sData, sizeof(sData));
     if (strcmp(sData, "1") != 0) {
@@ -180,14 +194,14 @@ static void handleBuyMap(tIslandSession *pstSession, const tFrame *pstFrame) {
  * @Ret: None.
  *
  ***********************************************/
-static void handleListMarket(tIslandSession *pstSession) {
+void handleListMarket(tIslandSession *pstSession) {
     char sData[FRAME_DATA_SIZE + 1];
     tProduct *pstList;
     int nNum = 0;
     int nTotal;
     int nLen;
 
-    if (pstSession->eState != SHIP_DOCKED) {
+    if (portGetState(pstSession->pstPort, &pstSession->stShip) != PORT_DOCKED) {
         sendTextFrame(pstSession->nFd, TYPE_LIST_MARKET, FLAGS_ERR, "NOT_DOCKED");
         return;
     }
@@ -218,18 +232,28 @@ static void handleListMarket(tIslandSession *pstSession) {
 
 /***********************************************
  *
- * @Name: stockReason
- * @Def: Converts a stock result into the reason text sent to the ship.
- * @Arg: In: eRes result of a stock operation
- * @Ret: Returns the reason string.
+ * @Name: sendTradeError
+ * @Def: Tells the ship why its purchase or sale was rejected.
+ * @Arg: In: pstSession session of the ship
+ *       In: ucType type of the request (TYPE_BUY or TYPE_SELL)
+ *       In: eRes result of the stock operation
+ * @Ret: None.
  *
  ***********************************************/
-static const char *stockReason(tStockResult eRes) {
+void sendTradeError(tIslandSession *pstSession, unsigned char ucType, tStockResult eRes) {
     switch (eRes) {
-        case STOCK_BAD_AMOUNT:  return "INVALID_AMOUNT";
-        case STOCK_NO_PRODUCT:  return "PRODUCT_NOT_FOUND";
-        case STOCK_NOT_ENOUGH:  return "NOT_ENOUGH_STOCK";
-        default:                return "INTERNAL_ERROR";
+        case STOCK_BAD_AMOUNT:
+            sendTextFrame(pstSession->nFd, ucType, FLAGS_ERR, "INVALID_AMOUNT");
+            break;
+        case STOCK_NO_PRODUCT:
+            sendTextFrame(pstSession->nFd, ucType, FLAGS_ERR, "PRODUCT_NOT_FOUND");
+            break;
+        case STOCK_NOT_ENOUGH:
+            sendTextFrame(pstSession->nFd, ucType, FLAGS_ERR, "NOT_ENOUGH_STOCK");
+            break;
+        default:
+            sendTextFrame(pstSession->nFd, ucType, FLAGS_ERR, "INTERNAL_ERROR");
+            break;
     }
 }
 
@@ -245,7 +269,7 @@ static const char *stockReason(tStockResult eRes) {
  * @Ret: Returns 0 on success, -1 if the format is wrong.
  *
  ***********************************************/
-static int parseTrade(const tFrame *pstFrame, char *psData, int nSize, char **ppsProduct, int *pnAmount) {
+int parseTrade(const tFrame *pstFrame, char *psData, int nSize, char **ppsProduct, int *pnAmount) {
     char *psAmount;
 
     frameDataToString(pstFrame, psData, nSize);
@@ -270,7 +294,7 @@ static int parseTrade(const tFrame *pstFrame, char *psData, int nSize, char **pp
  * @Ret: None.
  *
  ***********************************************/
-static void handleTrade(tIslandSession *pstSession, const tFrame *pstFrame, int nIsBuy) {
+void handleTrade(tIslandSession *pstSession, const tFrame *pstFrame, int nIsBuy) {
     unsigned char ucType = nIsBuy ? TYPE_BUY : TYPE_SELL;
     char sData[FRAME_DATA_SIZE + 1];
     char sReply[FRAME_DATA_SIZE + 1];
@@ -282,7 +306,7 @@ static void handleTrade(tIslandSession *pstSession, const tFrame *pstFrame, int 
     int nLen;
     tStockResult eRes;
 
-    if (pstSession->eState != SHIP_DOCKED) {
+    if (portGetState(pstSession->pstPort, &pstSession->stShip) != PORT_DOCKED) {
         sendTextFrame(pstSession->nFd, ucType, FLAGS_ERR, "NOT_DOCKED");
         return;
     }
@@ -298,7 +322,7 @@ static void handleTrade(tIslandSession *pstSession, const tFrame *pstFrame, int 
         eRes = stockSell(pstSession->pstStock, psProduct, nAmount, &nMoney, sCanonical);
     }
     if (eRes != STOCK_OK) {
-        sendTextFrame(pstSession->nFd, ucType, FLAGS_ERR, stockReason(eRes));
+        sendTradeError(pstSession, ucType, eRes);
         return;
     }
 
@@ -309,8 +333,12 @@ static void handleTrade(tIslandSession *pstSession, const tFrame *pstFrame, int 
     }
     sendFrame(pstSession->nFd, ucType, FLAGS_OK, sReply, nLen);
 
-    if (asprintf(&psMsg, ">>> %s %s %d kg of %s.\n", pstSession->psShipName,
-                 nIsBuy ? "bought" : "sold", nAmount, sCanonical) < 0) {
+    if (nIsBuy) {
+        nLen = asprintf(&psMsg, ">>> %s bought %d kg of %s.\n", pstSession->psShipName, nAmount, sCanonical);
+    } else {
+        nLen = asprintf(&psMsg, ">>> %s sold %d kg of %s.\n", pstSession->psShipName, nAmount, sCanonical);
+    }
+    if (nLen < 0) {
         psMsg = NULL;
     }
     printAndFree(psMsg);
@@ -327,10 +355,11 @@ static void handleTrade(tIslandSession *pstSession, const tFrame *pstFrame, int 
  ***********************************************/
 void serveShip(tIslandSession *pstSession) {
     tFrame stFrame;
-    char *psMsg = NULL;
     int nEnd = 0;
 
     while (!nEnd) {
+        // Docked and waiting ships are both read here, so a ship that
+        // disconnects is noticed at once, also while it waits for a dock.
         // 0 = the ship closed the connection or crashed, -1 = error
         if (recvFrame(pstSession->nFd, &stFrame) <= 0) {
             break;
@@ -364,15 +393,10 @@ void serveShip(tIslandSession *pstSession) {
         }
     }
 
-    // A ship that vanishes while docked must free its berth
-    if (pstSession->eState == SHIP_DOCKED) {
-        portLeave(pstSession->pstPort);
-        pstSession->eState = SHIP_GONE;
-        if (asprintf(&psMsg, ">>> %s has left.\n", pstSession->psShipName) < 0) {
-            psMsg = NULL;
-        }
-        printAndFree(psMsg);
-    }
+    // A ship that vanishes while docked must free its dock, and one that
+    // vanishes while waiting must leave the list. Nothing happens here if it
+    // already left with handleLeave or never arrived
+    leavePort(pstSession);
     free(pstSession->psShipName);
     pstSession->psShipName = NULL;
 }
