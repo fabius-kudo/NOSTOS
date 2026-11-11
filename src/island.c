@@ -1,6 +1,6 @@
 /***********************************************
  *
- * @File : island_main.c
+ * @File : island.c
  * @Purpose : Main function for the Island application
  *
  ***********************************************/
@@ -21,13 +21,21 @@
 #include "custom_io.h"
 #include "client_list.h"
 
-//global thread and socket for sig handling
 int gnServerFd = -1;
 pthread_t gtMainThread;
 
+/***********************************************
+ *
+ * @Name: handleExit
+ * @Def: CTRL+C handler. Closes the listening socket, which makes the accept
+ *       of the main loop fail and starts the shutdown of the island.
+ * @Arg: In: nSig signal number
+ * @Ret: None.
+ *
+ ***********************************************/
 void handleExit(int nSig) {
     (void)nSig;
- 
+
     // The signal can land in any thread: it is always passed on to main
     if (!pthread_equal(pthread_self(), gtMainThread)) {
         pthread_kill(gtMainThread, SIGINT);
@@ -36,14 +44,20 @@ void handleExit(int nSig) {
     closeSocket(&gnServerFd);
 }
 
-
+/***********************************************
+ *
+ * @Name: shipThread
+ * @Def: Thread of one ship: attends it until it leaves or disconnects.
+ * @Arg: In/Out: pArg node of this thread in the client list
+ * @Ret: NULL.
+ *
+ ***********************************************/
 void *shipThread(void *pArg) {
     tClientNode *pstNode = (tClientNode *)pArg;
- 
+
     serveShip((tIslandSession *)pstNode->pvData);
- 
-    // Last action. The socket and the session are not released here: the
-    // main thread does it after joining this thread
+
+    //main frees after joining
     clientListMarkDone(pstNode);
     return NULL;
 }
@@ -60,26 +74,26 @@ int main(int argc, char *argv[]) {
     tPort stPort;
     tStock stStock;
     tClientList stClients;
- 
+
     if (argc != 3) {
         printF("Usage: ./island <config.dat> <stock.db>\n");
         exit(EXIT_FAILURE);
     }
- 
+
     gtMainThread = pthread_self();
     signal(SIGINT, handleExit);
     signal(SIGPIPE, SIG_IGN);
- 
+
     stIsland = parseIsland(argv[1]);
     pstStock = parseStock(argv[2], &nNumProducts);
- 
+
     if (filterRoutes(&stIsland) < 0 || portInit(&stPort, stIsland.nMaxCapacity) < 0) {
         printF("Error: invalid island configuration\n");
         freeIsland(stIsland);
         free(pstStock);
         exit(EXIT_FAILURE);
     }
- 
+
     //### stock setup
     if (stockInit(&stStock, pstStock, nNumProducts, argv[2]) < 0) {
         portDestroy(&stPort);
@@ -88,7 +102,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
     pstStock = NULL;
- 
+
     //####### 'server' setup
     gnServerFd = createServerSocket(stIsland.psIpAddress, stIsland.nPort);
     if (gnServerFd < 0) {
@@ -103,7 +117,7 @@ int main(int argc, char *argv[]) {
         freeIsland(stIsland);
         exit(EXIT_FAILURE);
     }
- 
+
     nLen = asprintf(&psBuf, "Island %s initialized.\nPort capacity: %d %s.\n%d sea routes loaded.\n%d products available.\n\n",
                 stIsland.psName,
                 stIsland.nMaxCapacity, stIsland.nMaxCapacity == 1 ? "ship" : "ships",
@@ -113,19 +127,19 @@ int main(int argc, char *argv[]) {
         write(STDOUT_FILENO, psBuf, nLen);
         free(psBuf);
     }
- 
+
     clientListInit(&stClients);
- 
+
     //########## main client loop: ends when CTRL+C closes the listening socket
     while (gnServerFd >= 0) {
         nClientFd = acceptClient(gnServerFd);
         if (nClientFd < 0) {
             break;
         }
- 
+
         // Join the ships that already finished, so the list does not keep growing
         clientListReap(&stClients, 0);
- 
+
         pstSession = malloc(sizeof(tIslandSession));
         if (pstSession == NULL) {
             close(nClientFd);
@@ -135,10 +149,10 @@ int main(int argc, char *argv[]) {
         pstSession->nFd = nClientFd;
         pstSession->pstPort = &stPort;
         pstSession->psIslandName = stIsland.psName;
-        pstSession->eState = SHIP_NONE;
+        portShipInit(&pstSession->stShip, nClientFd);
         pstSession->pstStock = &stStock;
         pstSession->pstIsland = &stIsland;
- 
+
         // From here the list owns the session: it is freed with the node
         pstNode = clientListAdd(&stClients, nClientFd, pstSession);
         if (pstNode == NULL) {
@@ -151,30 +165,28 @@ int main(int argc, char *argv[]) {
             close(nClientFd);
         }
     }
- 
+
     // 1. no new ships (does nothing if the handler already closed it)
     closeSocket(&gnServerFd);
- 
-    // 2. the queued ships wake up, see the port is closing and end
-    portClose(&stPort);
+
     nLen = asprintf(&psBuf, "\n%s closes its port.\n", stIsland.psName);
     if (nLen >= 0) {
         write(STDOUT_FILENO, psBuf, nLen);
         free(psBuf);
     }
- 
-    // 3. the docked ships are blocked reading their socket: shutting it down
-    //    makes that read end, so each thread leaves through its normal exit
+
+    // 2. every ship thread, docked or waiting, is blocked reading its socket:
+    //    shutting it down makes that read end, so each thread leaves the
+    //    port through its normal exit
     clientListWake(&stClients);
- 
-    // 4. wait for every ship thread; their sockets and sessions are freed here
+
+    // 3. wait for every ship thread; their sockets and sessions are freed here
     clientListReap(&stClients, 1);
- 
-    // 5. no thread is left: the shared data can be destroyed safely
+
+    // 4. no thread is left: the shared data can be destroyed safely
     clientListDestroy(&stClients);
-    portDestroy(&stPort);                       // removes the semaphore from the kernel
+    portDestroy(&stPort);
     stockDestroy(&stStock);
     freeIsland(stIsland);
     return 0;
 }
- 

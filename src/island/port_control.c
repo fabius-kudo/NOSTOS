@@ -1,81 +1,84 @@
 /***********************************************
  *
  * @File : port_control.c
- * @Purpose : Dock control of an island: limited berths and a FIFO queue of waiting ships
+ * @Purpose : Dock control of an island: limited docks and a FIFO list of waiting ships
  * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
  * @Date : 31/10/26
  *
  ***********************************************/
 
 #include "port_control.h"
-// included only here (not in all that include port_control.h)
-#include "semaphore_v2.h"
-
+#include "protocol.h"
+#include "custom_io.h"
 
 /***********************************************
  *
- * @Name: waitSem
- * @Def: Waits on the port semaphore, retrying if a signal interrupts the wait.
- * @Arg: In: pstPort pointer to the port
- * @Ret: Returns 0 on success, -1 on error.
+ * @Name: takeFirst
+ * @Def: Takes the oldest ship out of the waiting list.
+ * @Arg: In/Out: pstPort pointer to the port (the caller must hold its mutex)
+ * @Ret: The ship, or NULL if nobody is waiting.
  *
  ***********************************************/
-static int waitSem(tPort *pstPort) {
-    semaphore stSem;
-    int nRet;
+tPortShip *takeFirst(tPort *pstPort) {
+    tPortShip *pstShip = pstPort->pstFirst;
 
-    // The port only stores the semaphore id; rebuild the library struct from it
-    stSem.shmid = pstPort->nWaitSemId;
-    do {
-        nRet = SEM_wait(&stSem);
-    } while (nRet < 0 && errno == EINTR);
-    return nRet;
+    if (pstShip != NULL) {
+        pstPort->pstFirst = pstShip->pstNext;
+        if (pstPort->pstFirst == NULL) {
+            pstPort->pstLast = NULL;
+        }
+        pstShip->pstNext = NULL;
+    }
+    return pstShip;
 }
 
 /***********************************************
  *
- * @Name: signalSem
- * @Def: Signals the port semaphore, waking the oldest sleeping ship.
- * @Arg: In: pstPort pointer to the port
- * @Ret: Returns 0 on success, -1 on error.
+ * @Name: removeWaiting
+ * @Def: Takes a ship out of the waiting list, wherever it is.
+ * @Arg: In/Out: pstPort pointer to the port (the caller must hold its mutex)
+ *       In/Out: pstShip ship to remove
+ * @Ret: None.
  *
  ***********************************************/
-static int signalSem(tPort *pstPort) {
-    semaphore stSem;
+void removeWaiting(tPort *pstPort, tPortShip *pstShip) {
+    tPortShip *pstPrev = NULL;
+    tPortShip *pstCur = pstPort->pstFirst;
 
-    stSem.shmid = pstPort->nWaitSemId;
-    return SEM_signal(&stSem);
+    while (pstCur != NULL && pstCur != pstShip) {
+        pstPrev = pstCur;
+        pstCur = pstCur->pstNext;
+    }
+    if (pstCur == NULL) {
+        return;
+    }
+    if (pstPrev == NULL) {
+        pstPort->pstFirst = pstShip->pstNext;
+    } else {
+        pstPrev->pstNext = pstShip->pstNext;
+    }
+    if (pstPort->pstLast == pstShip) {
+        pstPort->pstLast = pstPrev;
+    }
+    pstShip->pstNext = NULL;
 }
 
 /***********************************************
  *
  * @Name: portInit
- * @Def: Initializes the port: counters, mutex and the waiting semaphore (value 0).
- * @Arg: In/Out: pstPort pointer to the port to initialize
- *       In: nDocks number of berths of the island
+ * @Def: Initializes the port: all docks free, nobody waiting.
+ * @Arg: Out: pstPort pointer to the port to initialize
+ *       In: nDocks number of docks of the island
  * @Ret: Returns 0 on success, -1 on error.
  *
  ***********************************************/
 int portInit(tPort *pstPort, int nDocks) {
-    semaphore stSem;
-
     pstPort->nDocks = nDocks;
     pstPort->nDocked = 0;
-    pstPort->nQueued = 0;
-    pstPort->nClosing = 0;
-
-    if (SEM_constructor(&stSem) < 0) {
-        return -1;
-    }
-    // Value 0: nobody passes the semaphore until a leaving ship signals it
-    if (SEM_init(&stSem, 0) < 0) {
-        SEM_destructor(&stSem);
-        return -1;
-    }
-    pstPort->nWaitSemId = stSem.shmid;
+    pstPort->pstFirst = NULL;
+    pstPort->pstLast = NULL;
 
     if (pthread_mutex_init(&pstPort->stMutex, NULL) != 0) {
-        SEM_destructor(&stSem);
         return -1;
     }
     return 0;
@@ -83,116 +86,139 @@ int portInit(tPort *pstPort, int nDocks) {
 
 /***********************************************
  *
- * @Name: portArrive
- * @Def: A ship asks for a berth. It docks at once if one is free, otherwise
- *       it is counted in the queue.
- * @Arg: In/Out: pstPort pointer to the port
- * @Ret: Returns 1 if the ship docked, 0 if it must call portWaitTurn.
+ * @Name: portShipInit
+ * @Def: Prepares the port data of a ship that has just connected.
+ * @Arg: Out: pstShip port data of the ship
+ *       In: nFd socket of the ship
+ * @Ret: None.
  *
  ***********************************************/
-int portArrive(tPort *pstPort) {
-    int nDocked = 0;
+void portShipInit(tPortShip *pstShip, int nFd) {
+    pstShip->nFd = nFd;
+    pstShip->psName = NULL;
+    pstShip->eState = PORT_OUT;
+    pstShip->pstNext = NULL;
+}
 
-    // check and upadte in one step (so 2 dont take last)
+/***********************************************
+ *
+ * @Name: portGetState
+ * @Def: Reads the state of a ship. Another thread can change it (when a dock
+ *       is handed over), so it is always read with the mutex locked.
+ * @Arg: In/Out: pstPort pointer to the port
+ *       In: pstShip port data of the ship
+ * @Ret: The state of the ship.
+ *
+ ***********************************************/
+tPortState portGetState(tPort *pstPort, tPortShip *pstShip) {
+    tPortState eState;
+
     pthread_mutex_lock(&pstPort->stMutex);
+    eState = pstShip->eState;
+    pthread_mutex_unlock(&pstPort->stMutex);
+    return eState;
+}
+
+/***********************************************
+ *
+ * @Name: portArrive
+ * @Def: A ship asks for a dock. If one is free it takes it and is told
+ *       DOCKED; otherwise it joins the end of the waiting list and is told WAIT.
+ * @Arg: In/Out: pstPort pointer to the port
+ *       In/Out: pstShip port data of the ship
+ *       In: psName name of the ship (it stays owned by the caller)
+ * @Ret: Returns 1 if the ship docked, 0 if it is waiting, -1 if the answer
+ *       could not be sent (the ship must then leave with portLeave).
+ *
+ ***********************************************/
+int portArrive(tPort *pstPort, tPortShip *pstShip, char *psName) {
+    int nDocked = 0;
+    int nSent;
+
+    // The check, the update and the answer are one locked step: two ships
+    // cannot take the last dock, and no DOCKED can overtake this WAIT
+    pthread_mutex_lock(&pstPort->stMutex);
+    pstShip->psName = psName;
     if (pstPort->nDocked < pstPort->nDocks) {
         pstPort->nDocked++;
+        pstShip->eState = PORT_DOCKED;
         nDocked = 1;
+        nSent = sendTextFrame(pstShip->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "DOCKED");
     } else {
-        // The caller must now call portWaitTurn
-        pstPort->nQueued++;
+        // Added at the end: the list keeps the order of arrival
+        pstShip->pstNext = NULL;
+        if (pstPort->pstLast == NULL) {
+            pstPort->pstFirst = pstShip;
+        } else {
+            pstPort->pstLast->pstNext = pstShip;
+        }
+        pstPort->pstLast = pstShip;
+        pstShip->eState = PORT_QUEUED;
+        nSent = sendTextFrame(pstShip->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "WAIT");
     }
     pthread_mutex_unlock(&pstPort->stMutex);
+
+    if (nSent != 0) {
+        return -1;
+    }
     return nDocked;
 }
 
 /***********************************************
  *
- * @Name: portWaitTurn
- * @Def: Sleeps until a berth is handed over to this ship, or the port closes.
- * @Arg: In/Out: pstPort pointer to the port
- * @Ret: Returns 0 if the ship has a berth, -1 if the port is closing or on error.
- *
- ***********************************************/
-int portWaitTurn(tPort *pstPort) {
-    int nRet;
-
-    // The mutex is not held while sleeping, or nobody else could use the port.
-    // If the signal came first the count is 1 and this returns immediately.
-    if (waitSem(pstPort) < 0) {
-        return -1;
-    }
-    pthread_mutex_lock(&pstPort->stMutex);
-    nRet = pstPort->nClosing ? -1 : 0;
-    pthread_mutex_unlock(&pstPort->stMutex);
-    return nRet;
-}
-
-/***********************************************
- *
  * @Name: portLeave
- * @Def: A docked ship frees its berth: it is handed to the oldest queued ship,
- *       or becomes free if nobody is waiting.
+ * @Def: A ship leaves the port, whatever its state. A waiting ship is taken
+ *       out of the list. A docked ship hands its dock to the oldest waiting
+ *       ship and sends it DOCKED; if nobody is waiting the dock becomes free.
  * @Arg: In/Out: pstPort pointer to the port
- * @Ret: None.
+ *       In/Out: pstShip port data of the ship that leaves
+ *       Out: ppsNextName copy of the name of the ship that received the dock
+ *            (the caller frees it), or NULL if no ship received it
+ * @Ret: The state the ship had before leaving.
  *
  ***********************************************/
-void portLeave(tPort *pstPort) {
-    int nHandOff = 0;
+tPortState portLeave(tPort *pstPort, tPortShip *pstShip, char **ppsNextName) {
+    tPortState eBefore;
+    tPortShip *pstNext;
+
+    *ppsNextName = NULL;
 
     pthread_mutex_lock(&pstPort->stMutex);
-    if (pstPort->nQueued > 0) {
-        //berth goes to the oldest waiter, so nDocked stays the same
-        pstPort->nQueued--;
-        nHandOff = 1;
-    } else {
-        pstPort->nDocked--;
+    eBefore = pstShip->eState;
+    if (eBefore == PORT_QUEUED) {
+        removeWaiting(pstPort, pstShip);
+    } else if (eBefore == PORT_DOCKED) {
+        // The dock goes to the first waiting ship that can still be reached.
+        // A ship whose socket is broken is dropped and the next one is tried
+        pstNext = takeFirst(pstPort);
+        while (pstNext != NULL &&
+               sendTextFrame(pstNext->nFd, TYPE_ISLAND_ARRIVE, FLAGS_OK, "DOCKED") != 0) {
+            pstNext->eState = PORT_GONE;
+            pstNext = takeFirst(pstPort);
+        }
+        if (pstNext != NULL) {
+            // Hand-off: the dock stays counted, it only changes owner
+            pstNext->eState = PORT_DOCKED;
+            *ppsNextName = dupString(pstNext->psName);
+        } else {
+            pstPort->nDocked--;
+        }
     }
+    pstShip->eState = PORT_GONE;
     pthread_mutex_unlock(&pstPort->stMutex);
-
-    //Signal after unlocking: next ship can lock the mutex right away
-    if (nHandOff) {
-        signalSem(pstPort);
-    }
-}
-
-/***********************************************
- *
- * @Name: portClose
- * @Def: Closes the port and wakes every queued ship so none stays asleep forever.
- * @Arg: In/Out: pstPort pointer to the port
- * @Ret: None.
- *
- ***********************************************/
-void portClose(tPort *pstPort) {
-    int nWake;
-
-    // Woken ships read nClosing and know they did not get a berth
-    pthread_mutex_lock(&pstPort->stMutex);
-    pstPort->nClosing = 1;
-    nWake = pstPort->nQueued;
-    pstPort->nQueued = 0;
-    pthread_mutex_unlock(&pstPort->stMutex);
-
-    // One signal for each sleeping ship
-    for (int i = 0; i < nWake; i++) {
-        signalSem(pstPort);
-    }
+    return eBefore;
 }
 
 /***********************************************
  *
  * @Name: portDestroy
- * @Def: Removes the semaphore from the system and destroys the mutex.
+ * @Def: Destroys the mutex of the port. Every ship must have left before.
  * @Arg: In/Out: pstPort pointer to the port
  * @Ret: None.
  *
  ***********************************************/
 void portDestroy(tPort *pstPort) {
-    semaphore stSem;
-
-    //semaphore lives in the kernel, destroyed explicitly
-    stSem.shmid = pstPort->nWaitSemId;
-    SEM_destructor(&stSem);
+    pstPort->pstFirst = NULL;
+    pstPort->pstLast = NULL;
     pthread_mutex_destroy(&pstPort->stMutex);
 }
