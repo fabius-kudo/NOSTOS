@@ -13,60 +13,73 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <pthread.h>
-#include <errno.h>
 
 // Project Includes
 #include "voyage_config.h"
 #include "voyage_service.h"
 #include "socket_utils.h"
+#include "client_list.h"
 
-static volatile int gnStop = 0;
+int gnServerFd = -1;
+pthread_t gtMainThread;
 
 /***********************************************
  *
  * @Name: handleExit
- * @Def: Signal handler function for SIGINT interrupt signal.
+ * @Def: CTRL+C handler. Closes the listening socket, which makes the accept
+ *       of the main loop fail and starts the shutdown of Ithaca.
  * @Arg: In: nSig received signal number
  * @Ret: None.
  *
  ***********************************************/
 void handleExit(int nSig) {
     (void)nSig;
-    gnStop = 1;
-}
 
-static void *clientThread(void *pArg) {
-    sigset_t stSet;
-    sigemptyset(&stSet);
-    sigaddset(&stSet, SIGINT);
-    pthread_sigmask(SIG_BLOCK, &stSet, NULL);   // only the main thread handles Ctrl+C
-
-    tClientSession *pstSession = (tClientSession *)pArg;
-    serveClient(pstSession);
-    closeSocket(&pstSession->nFd);
-    free(pstSession);
-    return NULL;
+    // The signal can land in any thread: it is always passed on to main
+    if (!pthread_equal(pthread_self(), gtMainThread)) {
+        pthread_kill(gtMainThread, SIGINT);
+        return;
+    }
+    closeSocket(&gnServerFd);
 }
 
 /***********************************************
  *
- * @Name: main
- * @Def: Main entry point for the Ithaca application.
- * @Arg: In: argc number of command line arguments
- *       In: argv array of command line argument strings
- * @Ret: Returns 0 on success, or non-zero status code on error.
+ * @Name: clientThread
+ * @Def: Thread of one client: attends it until it disconnects.
+ * @Arg: In/Out: pArg node of this thread in the client list
+ * @Ret: NULL.
  *
  ***********************************************/
+void *clientThread(void *pArg) {
+    tClientNode *pstNode = (tClientNode *)pArg;
+    tClientSession *pstSession = (tClientSession *)pstNode->pvData;
+
+    serveClient(pstSession);
+
+    // A client that vanished without disconnecting still has its name
+    free(pstSession->psName);
+    pstSession->psName = NULL;
+
+    //Main thread frees after joining
+    clientListMarkDone(pstNode);
+    return NULL;
+}
+
+
 int main(int argc, char *argv[]) {
     int nNumVoyages = 0;
     int nLen = 0;
+    int nClientFd = -1;
     char *psBuf = NULL;
-    char *psErr = NULL;
     tIthaca stIthaca;
     tVoyage *pstVoyages = NULL;
+    tVoyageStore stStore;
+    tClientSession *pstSession = NULL;
+    tClientNode *pstNode = NULL;
+    tClientList stClients;
 
     // ########## INIT FROM FILE ###########
     if (argc != 3) {
@@ -75,28 +88,28 @@ int main(int argc, char *argv[]) {
     }
 
     //SIGNAL crtl c
-    struct sigaction stAct;
-    memset(&stAct, 0, sizeof(stAct));
-    stAct.sa_handler = handleExit;
-    sigemptyset(&stAct.sa_mask);
-    stAct.sa_flags = 0;                  // no SA_RESTART: accept() returns -1 with EINTR
-    sigaction(SIGINT, &stAct, NULL);
+    gtMainThread = pthread_self();
+    signal(SIGINT, handleExit);
+    signal(SIGPIPE, SIG_IGN);
 
     stIthaca = parseIthaca(argv[1]);
     pstVoyages = parseVoyages(argv[2], &nNumVoyages);
 
-    tVoyageStore stStore;
     stStore.pstVoyages = pstVoyages;
     stStore.nNumVoyages = nNumVoyages;
     pthread_mutex_init(&stStore.stMutex, NULL);
 
     // ############# SERVER INIT #########
 
-    int nServerFd = createServerSocket(stIthaca.psIpAddress, stIthaca.nPort);
-    if (nServerFd < 0) {
-        int nLen = asprintf(&psErr, "Error: Failed to create server socket on %s:%d (%s)\n",
-                 stIthaca.psIpAddress, stIthaca.nPort, strerror(errno));
-        write(STDOUT_FILENO, psErr, nLen);
+    gnServerFd = createServerSocket(stIthaca.psIpAddress, stIthaca.nPort);
+    if (gnServerFd < 0) {
+        nLen = asprintf(&psBuf, "Error: Failed to create server socket on %s:%d\n",
+                        stIthaca.psIpAddress, stIthaca.nPort);
+        if (nLen >= 0) {
+            write(STDOUT_FILENO, psBuf, nLen);
+            free(psBuf);
+        }
+        pthread_mutex_destroy(&stStore.stMutex);
         freeIthaca(&stIthaca);
         freeVoyages(pstVoyages, nNumVoyages);
         exit(EXIT_FAILURE);
@@ -105,45 +118,62 @@ int main(int argc, char *argv[]) {
     nLen = asprintf(&psBuf, "Ithaca initialized. %d voyages loaded.\nWaiting for Odysseus...\n", nNumVoyages);
     if (nLen < 0) {
         write(STDERR_FILENO, "Error: asprintf failed\n", strlen("Error: asprintf failed\n"));
-        closeSocket(&nServerFd);
+        closeSocket(&gnServerFd);
+        pthread_mutex_destroy(&stStore.stMutex);
         freeIthaca(&stIthaca);
         freeVoyages(pstVoyages, nNumVoyages);
         exit(EXIT_FAILURE);
-    } else {
-        write(STDOUT_FILENO, psBuf, nLen);
-        free(psBuf);
     }
+    write(STDOUT_FILENO, psBuf, nLen);
+    free(psBuf);
 
-    //  ######### SERVER LOOP (accept clients) #####
-    while (!gnStop) {
-        int nClientFd = acceptClient(nServerFd);
+    clientListInit(&stClients);
+
+    //  ######### SERVER LOOP 
+    while (gnServerFd >= 0) {
+        nClientFd = acceptClient(gnServerFd);
         if (nClientFd < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
             break;
         }
 
-        tClientSession *pstSession = calloc(1, sizeof(tClientSession));
-        if (!pstSession) {
+        // Join the clients that already finished, so the list does not keep growing
+        clientListReap(&stClients, 0);
+
+        pstSession = malloc(sizeof(tClientSession));
+        if (pstSession == NULL) {
             close(nClientFd);
             continue;
         }
+        memset(pstSession, 0, sizeof(tClientSession));
         pstSession->nFd = nClientFd;
         pstSession->pstStore = &stStore;
 
-        pthread_t nThreadId;
-        if (pthread_create(&nThreadId, NULL, clientThread, pstSession) != 0) {
-            close(nClientFd);
+        // From here the list owns the session: it is freed with the node
+        pstNode = clientListAdd(&stClients, nClientFd, pstSession);
+        if (pstNode == NULL) {
             free(pstSession);
-        } else {
-            pthread_detach(nThreadId);
+            close(nClientFd);
+            continue;
+        }
+        if (pthread_create(&pstNode->tThreadId, NULL, clientThread, pstNode) != 0) {
+            clientListDrop(&stClients, pstNode);
+            close(nClientFd);
         }
     }
-    
+
     write(STDOUT_FILENO, "\nIthaca closes the harbor.\n", strlen("\nIthaca closes the harbor.\n"));
 
-    closeSocket(&nServerFd);
+    // 1. no new clients (does nothing if the handler already closed it)
+    closeSocket(&gnServerFd);
+
+    // 2. every client thread is blocked reading its socket: shutting it down makes that read end, so each thread leaves through its normal exit
+    clientListWake(&stClients);
+
+    // 3. wait for every client thread; their sockets and sessions are freed here
+    clientListReap(&stClients, 1);
+
+    // 4. no thread is left: the shared data can be destroyed safely
+    clientListDestroy(&stClients);
     pthread_mutex_destroy(&stStore.stMutex);
     freeIthaca(&stIthaca);
     freeVoyages(pstVoyages, nNumVoyages);

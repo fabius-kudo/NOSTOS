@@ -27,6 +27,9 @@ build/protocol.o: $(UTIL)/protocol.c $(UTIL)/protocol.h
 build/socket_utils.o: $(UTIL)/socket_utils.c $(UTIL)/socket_utils.h
 	gcc $(CFLAGS) -c $(UTIL)/socket_utils.c -o build/socket_utils.o
 
+build/client_list.o: $(UTIL)/client_list.c $(UTIL)/client_list.h
+	gcc $(CFLAGS) -c $(UTIL)/client_list.c -o build/client_list.o
+
 # ---------- odysseus ----------
 build/ship_config.o: $(ODY)/ship_config.c $(ODY)/ship_config.h $(UTIL)/custom_io.h
 	gcc $(CFLAGS) -c $(ODY)/ship_config.c -o build/ship_config.o
@@ -63,18 +66,18 @@ build/island_stock.o: $(ISL)/island_stock.c $(ISL)/island_stock.h $(ISL)/port_co
 build/island_service.o: $(ISL)/island_service.c $(ISL)/island_service.h $(ISL)/port_control.h $(ISL)/island_stock.h $(ISL)/port_config.h $(UTIL)/protocol.h $(UTIL)/socket_utils.h $(UTIL)/custom_io.h
 	gcc $(CFLAGS) -c $(ISL)/island_service.c -o build/island_service.o
 
-build/island.o: src/island.c $(ISL)/port_config.h $(ISL)/port_control.h $(ISL)/island_stock.h $(ISL)/island_service.h $(UTIL)/socket_utils.h $(SPHRAGIS)/sphragis.h
+build/island.o: src/island.c $(ISL)/port_config.h $(ISL)/port_control.h $(ISL)/island_stock.h $(ISL)/island_service.h $(UTIL)/socket_utils.h $(SPHRAGIS)/sphragis.h $(UTIL)/client_list.h
 	gcc $(CFLAGS) -c src/island.c -o build/island.o
 
 # ---------- executables  ----------
 odysseus: build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_io.o $(SPHRAGIS)/sphragis.o
 	gcc build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_io.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o odysseus -lpthread
 
-island: build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_io.o $(SPHRAGIS)/sphragis.o
-	gcc build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_io.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o island -lpthread
+island: build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_io.o build/client_list.o $(SPHRAGIS)/sphragis.o
+	gcc build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_io.o build/client_list.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o island -lpthread
 
-ithaca: build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o
-	gcc build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o $(CFLAGS) -o ithaca -lpthread
+ithaca: build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o build/client_list.o
+	gcc build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o build/client_list.o $(CFLAGS) -o ithaca -lpthread
 
 clean:
 	rm -f build/*.o odysseus island ithaca
