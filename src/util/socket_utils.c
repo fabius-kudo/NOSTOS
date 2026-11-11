@@ -24,16 +24,9 @@
  ***********************************************/
 int createServerSocket(const char *psIp, int nPort) {
     struct sockaddr_in stAddr;
-    int nOpt = 1;
     int nFd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (nFd < 0) {
-        return -1;
-    }
-
-    // Allows restarting right after CTRL+C without "Address already in use"
-    if (setsockopt(nFd, SOL_SOCKET, SO_REUSEADDR, &nOpt, sizeof(nOpt)) < 0) {
-        close(nFd);
         return -1;
     }
 
