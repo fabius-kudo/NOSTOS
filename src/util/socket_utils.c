@@ -19,7 +19,7 @@
  *       listening, so the server can accept clients.
  * @Arg: In: psIp IPv4 address
  *       In: nPort port to listen on
- * @Ret: Listening socket, or -1 on error with errno set to the cause.
+ * @Ret: Listening socket, or -1 on error.
  *
  ***********************************************/
 int createServerSocket(const char *psIp, int nPort) {
@@ -33,9 +33,7 @@ int createServerSocket(const char *psIp, int nPort) {
 
     // Allows restarting right after CTRL+C without "Address already in use"
     if (setsockopt(nFd, SOL_SOCKET, SO_REUSEADDR, &nOpt, sizeof(nOpt)) < 0) {
-        int nErr = errno;
         close(nFd);
-        errno = nErr;
         return -1;
     }
 
@@ -49,9 +47,7 @@ int createServerSocket(const char *psIp, int nPort) {
 
     if (bind(nFd, (struct sockaddr *)&stAddr, sizeof(stAddr)) < 0 ||
         listen(nFd, LISTEN_BACKLOG) < 0) {
-        int nErr = errno;
         close(nFd);
-        errno = nErr;
         return -1;
     }
     return nFd;
@@ -76,7 +72,7 @@ int acceptClient(int nServerFd) {
  *       and the islands.
  * @Arg: In: psIp IPv4 address
  *       In: nPort server port
- * @Ret: Connected socket, or -1 on error with errno set to the cause.
+ * @Ret: Connected socket, or -1 on error.
  *
  ***********************************************/
 int connectToServer(const char *psIp, int nPort) {
@@ -96,9 +92,7 @@ int connectToServer(const char *psIp, int nPort) {
     }
 
     if (connect(nFd, (struct sockaddr *)&stAddr, sizeof(stAddr)) < 0) {
-        int nErr = errno;
         close(nFd);
-        errno = nErr;
         return -1;
     }
     return nFd;

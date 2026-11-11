@@ -562,7 +562,7 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     nFd = connectToServer(pstDest->sIp, pstDest->nPort);
     if (nFd < 0) {
         psMsg = NULL;
-        if (asprintf(&psMsg, "Error: cannot reach %s (%s).\n", pstDest->sName, strerror(errno)) < 0) {
+        if (asprintf(&psMsg, "Error: cannot reach %s.\n", pstDest->sName) < 0) {
             psMsg = NULL;
         }
         printAndFree(psMsg);

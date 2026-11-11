@@ -92,7 +92,7 @@ int sendFrame(int nFd, unsigned char ucType, unsigned char ucFlags, const void *
  *       In: ucType frame type
  *       In: ucFlags frame flags
  *       In: psText NUL-terminated text, at most 253 characters
- * @Ret: 0 on success, -1 on error (see sendFrame).
+ * @Ret: 0 on success, -1 on error.
  *
  ***********************************************/
 int sendTextFrame(int nFd, unsigned char ucType, unsigned char ucFlags, const char *psText) {
@@ -106,8 +106,7 @@ int sendTextFrame(int nFd, unsigned char ucType, unsigned char ucFlags, const ch
  *       a raw buffer and then deserialized with parseFrame.
  * @Arg: In: nFd connected socket
  *       Out: pstFrame received frame
- * @Ret: 1 on success, 0 if the peer closed the connection, -1 on error
- *       (errno == EINTR if interrupted by a signal such as CTRL+C).
+ * @Ret: 1 on success, 0 if the peer closed the connection, -1 on error.
  *
  ***********************************************/
 int recvFrame(int nFd, tFrame *pstFrame) {
@@ -121,7 +120,7 @@ int recvFrame(int nFd, tFrame *pstFrame) {
             return 0;                       // disconnected
         }
         if (nRead < 0) {
-            return -1;                      // caller checks errno/EINTR
+            return -1;                      
         }
         nTotal += (int)nRead;
     }

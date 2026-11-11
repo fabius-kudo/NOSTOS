@@ -25,9 +25,6 @@
 // Constant Declarations
 #define MAX_ARGS 4
 
-// Custom Type Definitions
-typedef int (*tCommandHandler)(void *context, int nArgc, char *ppsArgv[]);
-
 typedef enum {
     ARG_NONE,
     ARG_NUMERIC,
@@ -35,6 +32,7 @@ typedef enum {
 } tArgKind;
 
 typedef enum {
+    CMD_UNKNOWN,
     CMD_CONNECT_ITHACA,
     CMD_LIST_VOYAGES,
     CMD_ACCEPT,
@@ -48,15 +46,6 @@ typedef enum {
     CMD_DELIVER,
     CMD_CLAIM
 } tCmdId;
-
-typedef struct {
-    const char *psWord1;
-    const char *psWord2;       // NULL for one-word commands
-    int nNumArgs;
-    int aArgKinds[2];          // ARG_NUMERIC / ARG_TEXT (keep your own type)
-    const char *psUsage;
-    tCmdId id;                 // replaces the function pointer
-} tCommand;
 
 void processLine(tShip *pstShip, char *ppsTokens[], int nTokenCount);
 int tokenizeLine(char *psLine, char *ppsArgv[], int nMaxTokens);
