@@ -97,6 +97,7 @@ int main(int argc, char *argv[]) {
 
     stStore.pstVoyages = pstVoyages;
     stStore.nNumVoyages = nNumVoyages;
+    stStore.psObjectsDir = stIthaca.psPath;
     pthread_mutex_init(&stStore.stMutex, NULL);
 
     // ############# SERVER INIT #########

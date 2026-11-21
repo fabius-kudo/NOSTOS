@@ -27,12 +27,14 @@ typedef enum {
     ACCEPT_ALREADY_HAVE_VOYAGE,
     ACCEPT_NOT_FOUND,
     ACCEPT_NOT_AVAILABLE,
-    ACCEPT_INTERNAL_ERROR
+    ACCEPT_INTERNAL_ERROR,
+    ACCEPT_NO_OBJECT
 } tAcceptResult;
 typedef struct {
     tVoyage *pstVoyages;
     int nNumVoyages;
     pthread_mutex_t stMutex;
+    const char *psObjectsDir;
 } tVoyageStore;
 
 //State of one connected Odysseus

@@ -12,6 +12,7 @@
 
 #define _GNU_SOURCE
 #include "ship_actions.h"
+#include "file_transfer.h"
 
 /***********************************************
  * @Name: sayError
@@ -66,12 +67,28 @@ static int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *
     }
     free(pstShip->stVoyage.psObject);
     free(pstShip->stVoyage.psDestination);
+    free(pstShip->stVoyage.psObjectPath);
+    pstShip->stVoyage.psObjectPath = NULL;
     pstShip->stVoyage.nId = nId;
     pstShip->stVoyage.psObject = psObjCopy;
     pstShip->stVoyage.psDestination = psDestCopy;
     pstShip->stVoyage.nReward = nReward;
     pstShip->nHasVoyage = 1;
     return 0;
+}
+
+/***********************************************
+ * @Name: clearVoyage
+ * @Def: Forgets the active voyage and frees its strings.
+ * @Arg: In/Out: pstShip ship to update
+ * @Ret: None.
+ ***********************************************/
+static void clearVoyage(tShip *pstShip) {
+    free(pstShip->stVoyage.psObject);
+    free(pstShip->stVoyage.psDestination);
+    free(pstShip->stVoyage.psObjectPath);
+    memset(&pstShip->stVoyage, 0, sizeof(pstShip->stVoyage));
+    pstShip->nHasVoyage = 0;
 }
 
 /***********************************************
@@ -89,6 +106,7 @@ void releaseShip(tShip *pstShip) {
     free(pstShip->psLocation);
     free(pstShip->stVoyage.psObject);
     free(pstShip->stVoyage.psDestination);
+    free(pstShip->stVoyage.psObjectPath);
 
     for (int i = 0; i < pstShip->nNumIslands; i++) {
         free(pstShip->pstIslands[i].sName);
@@ -286,7 +304,10 @@ int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 /***********************************************
  * @Name: cmdAcceptVoyage
  * @Def: ACCEPT <id>. Asks Ithaca for the voyage and, on success, stores it
- *       as the ship's active voyage. Not allowed while a voyage is active.
+ *       as the ship's active voyage and receives its object (OBJECT
+ *       transfer) into the ship's folder. Without the object the voyage is
+ *       dropped, as Ithaca also releases it. Not allowed while a voyage is
+ *       active.
  * @Arg: In/Out: pstShip ship state (must be connected to Ithaca)
  *       In: nArgc unused
  *       In: ppsArgv ppsArgv[0] = voyage identifier
@@ -297,6 +318,8 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     tFrame stReply;
     char sData[FRAME_DATA_SIZE + 1];
+    char *psPath = NULL;
+    int nRes;
 
     if (pstShip->nIthacaFd < 0) {
         printF("Error: not connected to Ithaca.\n");
@@ -338,11 +361,26 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
 
     char *psMsg = NULL;
-    if (asprintf(&psMsg, "Voyage %d accepted.\nDestination: %s.\n",
-                 pstShip->stVoyage.nId, pstShip->stVoyage.psDestination) < 0) {
+    if (asprintf(&psMsg, "Voyage %d accepted.\nDestination: %s.\n\nReceiving %s...\n",
+                 pstShip->stVoyage.nId, pstShip->stVoyage.psDestination, pstShip->stVoyage.psObject) < 0) {
         psMsg = NULL;
     }
     printAndFree(psMsg);
+
+    // Ithaca sends the object right after the OK
+    nRes = receiveFile(pstShip->nIthacaFd, "OBJECT", pstShip->stConfig.psFilePath, &psPath);
+    if (nRes != TRANSFER_OK) {
+        if (nRes == TRANSFER_LOST) {
+            printF("Error: connection to Ithaca lost.\n");
+            closeSocket(&pstShip->nIthacaFd);
+        } else {
+            printF("Error: the object could not be received. The voyage has been cancelled.\n");
+        }
+        clearVoyage(pstShip);
+        return -1;
+    }
+    pstShip->stVoyage.psObjectPath = psPath;
+    printF("Object transferred correctly.\n");
     return 0;
 }
 

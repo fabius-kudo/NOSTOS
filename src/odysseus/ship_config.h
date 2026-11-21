@@ -51,6 +51,7 @@ typedef struct {
     char *psObject;
     char *psDestination;
     int nReward;
+    char *psObjectPath;
 } tActiveVoyage;
 
 // An island the ship knows how to reach

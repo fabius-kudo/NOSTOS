@@ -10,6 +10,7 @@
 #define _GNU_SOURCE
 #include "voyage_service.h"
 #include "custom_io.h"
+#include "file_transfer.h"
 
 /***********************************************
  *
@@ -163,10 +164,82 @@ void sendAcceptError(tClientSession *pstSession, tAcceptResult eRes) {
         case ACCEPT_NOT_AVAILABLE:
             sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "VOYAGE_NOT_AVAILABLE");
             break;
+        case ACCEPT_NO_OBJECT:
+            sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "OBJECT_NOT_AVAILABLE");
+            break;
         default:
             sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "INTERNAL_ERROR");
             break;
     }
+}
+
+/***********************************************
+ *
+ * @Name: findVoyage
+ * @Def: Looks up a voyage by its identifier. The identifier and the file of
+ *       a voyage never change after startup, so they can be read without
+ *       the lock; its state and owner can only be read with the lock.
+ * @Arg: In: pstStore voyage store
+ *       In: nId voyage identifier
+ * @Ret: Pointer to the voyage, or NULL if it does not exist.
+ *
+ ***********************************************/
+tVoyage *findVoyage(tVoyageStore *pstStore, int nId) {
+    for (int i = 0; i < pstStore->nNumVoyages; i++) {
+        if (pstStore->pstVoyages[i].nId == nId) {
+            return &pstStore->pstVoyages[i];
+        }
+    }
+    return NULL;
+}
+
+/***********************************************
+ *
+ * @Name: objectPath
+ * @Def: Builds the path of the object file of a voyage. The file named in
+ *       voyages.dat is used if it can be opened as written; otherwise it is
+ *       looked for by name in the objects folder of the Ithaca config.
+ * @Arg: In: pstStore voyage store (holds the objects folder)
+ *       In: pstVoyage voyage whose object is needed
+ * @Ret: Heap copy of the path (the caller frees it), or NULL on error.
+ *
+ ***********************************************/
+char *objectPath(const tVoyageStore *pstStore, const tVoyage *pstVoyage) {
+    char *psPath = NULL;
+    const char *psName = strrchr(pstVoyage->psFile, '/');
+    int nFd = open(pstVoyage->psFile, O_RDONLY);
+
+    if (nFd >= 0) {
+        close(nFd);
+        return dupString(pstVoyage->psFile);
+    }
+    psName = (psName == NULL) ? pstVoyage->psFile : psName + 1;
+    if (asprintf(&psPath, "%s/%s", pstStore->psObjectsDir, psName) < 0) {
+        return NULL;
+    }
+    return psPath;
+}
+
+/***********************************************
+ *
+ * @Name: releaseVoyage
+ * @Def: Makes a voyage available again after its object could not be
+ *       delivered to the Odysseus that accepted it.
+ * @Arg: In/Out: pstStore voyage store
+ *       In/Out: pstVoyage voyage to release
+ *       In: psOwner name of the Odysseus it was assigned to
+ * @Ret: None.
+ *
+ ***********************************************/
+void releaseVoyage(tVoyageStore *pstStore, tVoyage *pstVoyage, const char *psOwner) {
+    pthread_mutex_lock(&pstStore->stMutex);
+    if (pstVoyage->eState == VOYAGE_ASSIGNED && pstVoyage->sOwner != NULL &&
+        strcmp(pstVoyage->sOwner, psOwner) == 0) {
+        pstVoyage->eState = VOYAGE_AVAILABLE;
+        free(pstVoyage->sOwner);
+        pstVoyage->sOwner = NULL;
+    }
+    pthread_mutex_unlock(&pstStore->stMutex);
 }
 
 /***********************************************
@@ -176,7 +249,9 @@ void sendAcceptError(tClientSession *pstSession, tAcceptResult eRes) {
  *       if it exists, is still available, and the ship holds no other
  *       assigned voyage. The check and the assignment happen under the same
  *       lock, so two ships can never get the same voyage. Replies
- *       OK&ID&Object&Destination&Reward, or an error frame with the reason.
+ *       OK&ID&Object&Destination&Reward, or an error frame with the reason,
+ *       and then sends the object file (OBJECT transfer). If the object
+ *       cannot be delivered, the voyage becomes available again.
  * @Arg: In: pstSession session of the requesting client
  *       In: pstFrame received request frame (data = voyage ID)
  * @Ret: None.
@@ -189,7 +264,11 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     char *psMsg = NULL;
     tAcceptResult eRes = ACCEPT_OK;
     tVoyage *pstVoyage = NULL;
+    char sMd5[MD5_LENGTH + 1];
+    char *psPath = NULL;
+    int nSize = 0;
     int nId, nLen = 0;
+    int nRes;
 
     //Get the voyage ID from the frame data
     frameDataToString(pstFrame, sData, sizeof(sData));
@@ -198,6 +277,19 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
         sendTextFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_ERR, "INVALID_ID");
         return;
     }
+
+    // The object is checked before taking the lock (md5sum runs a child
+    // process): if it cannot be sent, the voyage is not assigned at all
+    pstVoyage = findVoyage(pstStore, nId);
+    if (pstVoyage != NULL) {
+        psPath = objectPath(pstStore, pstVoyage);
+        if (psPath == NULL || prepareFile(psPath, &nSize, sMd5) != 0) {
+            free(psPath);
+            sendAcceptError(pstSession, ACCEPT_NO_OBJECT);
+            return;
+        }
+    }
+    pstVoyage = NULL;
 
     pthread_mutex_lock(&pstStore->stMutex);
 
@@ -247,13 +339,36 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
 
     // The answer is sent after releasing the lock
     if (eRes != ACCEPT_OK) {
+        free(psPath);
         sendAcceptError(pstSession, eRes);
         return;
     }
 
-    sendFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_OK, sReply, nLen);
+    if (sendFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_OK, sReply, nLen) != 0) {
+        releaseVoyage(pstStore, pstVoyage, pstSession->psName);
+        free(psPath);
+        return;
+    }
 
-    if (asprintf(&psMsg, ">>> Voyage %d assigned to %s.\n", nId, pstSession->psName) < 0) {
+    if (asprintf(&psMsg, ">>> Voyage %d assigned to %s.\n>>> Sending %s to %s...\n",
+                 nId, pstSession->psName, pstVoyage->psObject, pstSession->psName) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+
+    // OBJECT transfer. The lock is not held: it can take a while, and the
+    // voyage is already assigned to this ship, so nobody else can take it
+    nRes = sendFile(pstSession->nFd, "OBJECT", psPath, nSize, sMd5, 1);
+    free(psPath);
+
+    if (nRes == TRANSFER_OK) {
+        printF(">>> Object transferred successfully.\n");
+        return;
+    }
+    // The Odysseus does not have the object, so the voyage is not its
+    releaseVoyage(pstStore, pstVoyage, pstSession->psName);
+    if (asprintf(&psMsg, ">>> The object could not be sent to %s. Voyage %d is available again.\n",
+                 pstSession->psName, nId) < 0) {
         psMsg = NULL;
     }
     printAndFree(psMsg);

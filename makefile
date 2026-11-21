@@ -30,6 +30,9 @@ build/socket_utils.o: $(UTIL)/socket_utils.c $(UTIL)/socket_utils.h
 build/client_list.o: $(UTIL)/client_list.c $(UTIL)/client_list.h
 	gcc $(CFLAGS) -c $(UTIL)/client_list.c -o build/client_list.o
 
+build/file_transfer.o: $(UTIL)/file_transfer.c $(UTIL)/file_transfer.h $(UTIL)/protocol.h $(UTIL)/custom_io.h
+	gcc $(CFLAGS) -c $(UTIL)/file_transfer.c -o build/file_transfer.o
+
 # ---------- odysseus ----------
 build/ship_config.o: $(ODY)/ship_config.c $(ODY)/ship_config.h $(UTIL)/custom_io.h
 	gcc $(CFLAGS) -c $(ODY)/ship_config.c -o build/ship_config.o
@@ -70,14 +73,14 @@ build/island.o: src/island.c $(ISL)/port_config.h $(ISL)/port_control.h $(ISL)/i
 	gcc $(CFLAGS) -c src/island.c -o build/island.o
 
 # ---------- executables  ----------
-odysseus: build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_io.o $(SPHRAGIS)/sphragis.o
-	gcc build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_io.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o odysseus -lpthread
+odysseus: build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_io.o build/file_transfer.o $(SPHRAGIS)/sphragis.o
+	gcc build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_io.o build/file_transfer.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o odysseus -lpthread
 
 island: build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_io.o build/client_list.o $(SPHRAGIS)/sphragis.o
 	gcc build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_io.o build/client_list.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o island -lpthread
 
-ithaca: build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o build/client_list.o
-	gcc build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o build/client_list.o $(CFLAGS) -o ithaca -lpthread
+ithaca: build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o build/client_list.o build/file_transfer.o
+	gcc build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o build/client_list.o build/file_transfer.o $(CFLAGS) -o ithaca -lpthread
 
 clean:
 	rm -f build/*.o odysseus island ithaca
