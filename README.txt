@@ -13,9 +13,18 @@ Execution examples:
 Assuming there exists the directories dat/ and 'Island Stock'/ for the config files
 Normal:
 
-./ithaca dat/t_ithaca.dat dat/voyages.dat 
-./odysseus dat/t_odysseus.dat
-./island dat/t_island.dat Island\ Stock/Aeaea.db 
+montserrat:
+./ithaca dat/ithaca.dat dat/voyages.dat 
+./odysseus dat/polyphemus.dat
+./odysseus dat/agamemnon.dat
+./odysseus dat/telemachus.dat
+
+matagalls:
+./island dat/aeaea.dat Island\ Stock/Aeaea.db
+./island dat/scheria.dat Island\ Stock/Scheria.db 
+./island dat/aeolia.dat Island\ Stock/Aeolia.db 
+./island dat/ogygia.dat Island\ Stock/Ogygia.db 
+./island dat/thrinacia.dat Island\ Stock/Thrinacia.db 
 
 
 With valgrind (full):
