@@ -33,7 +33,10 @@
 //Prototypes
 int computeMd5(const char *psPath, char *psMd5);
 int prepareFile(const char *psPath, int *pnSize, char *psMd5);
+const char *baseName(const char *psPath);
 int sendFile(int nFd, const char *psKind, const char *psPath, int nSize, const char *psMd5, int nAsServer);
 int receiveFile(int nFd, const char *psKind, const char *psDir, char **ppsPath);
+int receiveFileFrom(int nFd, const tFrame *pstHeader, const char *psKind, const char *psDir, char **ppsPath);
+int rejectFile(int nFd, const char *psReason);
 
 #endif

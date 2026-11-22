@@ -44,16 +44,17 @@ int computeMd5(const char *psPath, char *psMd5) {
     }
 
     if (nPid == 0) {
-        //Child: standard output = write of the pipe
+        // Child: its standard output becomes the write end of the pipe, then
+        // it is replaced by md5sum, which prints "<hash>  <file>"
         close(anPipe[0]);
         dup2(anPipe[1], STDOUT_FILENO);
         close(anPipe[1]);
         execlp("md5sum", "md5sum", psPath, (char *)NULL);
-        //Only reached if md5sum could not be executed
+        // Only reached if md5sum could not be executed
         exit(EXIT_FAILURE);
     }
 
-    //Parent: read hash, waits for the child
+    // Parent: reads the hash and waits for the child, so it does not stay a zombie
     close(anPipe[1]);
     nBytes = read(anPipe[0], psMd5 + nRead, MD5_LENGTH - nRead);
     while (nBytes > 0 && nRead + nBytes < MD5_LENGTH) {
@@ -271,6 +272,52 @@ int isMd5Text(const char *psText) {
  *
  ***********************************************/
 int receiveFile(int nFd, const char *psKind, const char *psDir, char **ppsPath) {
+    tFrame stHeader;
+
+    *ppsPath = NULL;
+    if (recvFrame(nFd, &stHeader) != 1) {
+        return TRANSFER_LOST;
+    }
+    return receiveFileFrom(nFd, &stHeader, psKind, psDir, ppsPath);
+}
+
+/***********************************************
+ *
+ * @Name: rejectFile
+ * @Def: Refuses a transfer the other side has already started: reads its
+ *       header and answers READY with an error, so no data frames follow
+ *       and the connection stays in step.
+ * @Arg: In: nFd connected socket
+ *       In: psReason reason sent in the READY frame
+ * @Ret: TRANSFER_REJECTED, or TRANSFER_LOST if the header did not arrive.
+ *
+ ***********************************************/
+int rejectFile(int nFd, const char *psReason) {
+    tFrame stHeader;
+
+    if (recvFrame(nFd, &stHeader) != 1 || stHeader.ucType != TYPE_FILE_HEADER) {
+        return TRANSFER_LOST;
+    }
+    if (sendTextFrame(nFd, TYPE_FILE_READY, FLAGS_ERR, psReason) != 0) {
+        return TRANSFER_LOST;
+    }
+    return TRANSFER_REJECTED;
+}
+
+/***********************************************
+ *
+ * @Name: receiveFileFrom
+ * @Def: Same as receiveFile, for when the header frame has already been read
+ *       (the caller had to look at it to know a file was coming).
+ * @Arg: In: nFd connected socket
+ *       In: pstHeader header frame already received
+ *       In: psKind transfer kind expected in the header
+ *       In: psDir folder where the file is stored
+ *       Out: ppsPath path of the stored file (the caller frees it), or NULL
+ * @Ret: TRANSFER_OK, TRANSFER_REJECTED or TRANSFER_LOST.
+ *
+ ***********************************************/
+int receiveFileFrom(int nFd, const tFrame *pstHeader, const char *psKind, const char *psDir, char **ppsPath) {
     char sData[FRAME_DATA_SIZE + 1];
     char sMd5[MD5_LENGTH + 1];
     char sExpectedMd5[MD5_LENGTH + 1];
@@ -289,10 +336,10 @@ int receiveFile(int nFd, const char *psKind, const char *psDir, char **ppsPath) 
     *ppsPath = NULL;
 
     // Header: "<KIND>&<FileName>&<FileSize>&<MD5SUM>"
-    if (recvFrame(nFd, &stFrame) != 1 || stFrame.ucType != TYPE_FILE_HEADER) {
+    if (pstHeader->ucType != TYPE_FILE_HEADER) {
         return TRANSFER_LOST;
     }
-    frameDataToString(&stFrame, sData, sizeof(sData));
+    frameDataToString(pstHeader, sData, sizeof(sData));
     psFileKind = strtok(sData, "&");
     psName = strtok(NULL, "&");
     psSize = strtok(NULL, "&");

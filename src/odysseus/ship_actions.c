@@ -12,7 +12,6 @@
 
 #define _GNU_SOURCE
 #include "ship_actions.h"
-#include "file_transfer.h"
 
 /***********************************************
  * @Name: sayError
@@ -68,7 +67,10 @@ static int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *
     free(pstShip->stVoyage.psObject);
     free(pstShip->stVoyage.psDestination);
     free(pstShip->stVoyage.psObjectPath);
+    free(pstShip->stVoyage.psSignedPath);
     pstShip->stVoyage.psObjectPath = NULL;
+    pstShip->stVoyage.psSignedPath = NULL;
+    pstShip->stVoyage.nDelivered = 0;
     pstShip->stVoyage.nId = nId;
     pstShip->stVoyage.psObject = psObjCopy;
     pstShip->stVoyage.psDestination = psDestCopy;
@@ -87,6 +89,7 @@ static void clearVoyage(tShip *pstShip) {
     free(pstShip->stVoyage.psObject);
     free(pstShip->stVoyage.psDestination);
     free(pstShip->stVoyage.psObjectPath);
+    free(pstShip->stVoyage.psSignedPath);
     memset(&pstShip->stVoyage, 0, sizeof(pstShip->stVoyage));
     pstShip->nHasVoyage = 0;
 }
@@ -107,6 +110,7 @@ void releaseShip(tShip *pstShip) {
     free(pstShip->stVoyage.psObject);
     free(pstShip->stVoyage.psDestination);
     free(pstShip->stVoyage.psObjectPath);
+    free(pstShip->stVoyage.psSignedPath);
 
     for (int i = 0; i < pstShip->nNumIslands; i++) {
         free(pstShip->pstIslands[i].sName);
@@ -650,6 +654,17 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     if (setLocation(pstShip, pstDest->sName) < 0) {
         printF("Error: out of memory.\n");
         return -1;
+    }
+
+    // Arrived where the object has to be delivered
+    if (pstShip->nHasVoyage && !pstShip->stVoyage.nDelivered &&
+        strcasecmp(pstDest->sName, pstShip->stVoyage.psDestination) == 0) {
+        psMsg = NULL;
+        if (asprintf(&psMsg, "\n>>> We have reached the destination: %s\n",
+                     pstDest->sName, pstShip->stVoyage.psObject) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
     }
     return 0;
 }
@@ -1358,17 +1373,143 @@ int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     psMsg = NULL;
     if (pstShip->nHasVoyage) {
-        if (asprintf(&psMsg, "Current voyage: %s -> %s\nReward: %d\n", tVoyage.psObject, tVoyage.psDestination, tVoyage.nReward) < 0) {
+        // After the delivery the object carried is the stamped one
+        const char *psFile = tVoyage.nDelivered ? tVoyage.psSignedPath : tVoyage.psObjectPath;
+        if (asprintf(&psMsg, "Current voyage: %s -> %s\nReward: %d\nObject: %s\n",
+                     tVoyage.psObject, tVoyage.psDestination, tVoyage.nReward,
+                     psFile ? baseName(psFile) : "None") < 0) {
             psMsg = NULL;
         }
         printAndFree(psMsg);
     } else {
-        printF("Current voyage: None\nReward: None\n");
+        printF("Current voyage: None\n");
     }
 
     psMsg = NULL;
     if (asprintf(&psMsg, "\nCurrent location: %s\n",
                  pstShip->psLocation ? pstShip->psLocation : "None") < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+    return 0;
+}
+/***********************************************
+ * @Name: cmdDeliver
+ * @Def: DELIVER. Only when docked at the destination of the active voyage.
+ *       Sends the object to the island (DELIVERY transfer), receives it back
+ *       stamped with the island's glyph (SIGNED transfer) and keeps the
+ *       stamped image as proof for Ithaca.
+ * @Arg: In/Out: pstShip ship state (must be docked at the destination)
+ *       In: nArgc, ppsArgv unused
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
+int cmdDeliver(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+    (void)ppsArgv;
+
+    tFrame stFrame;
+    char sData[FRAME_DATA_SIZE + 1];
+    char sMd5[MD5_LENGTH + 1];
+    char *psRequest = NULL;
+    char *psSigned = NULL;
+    char *psMsg = NULL;
+    int nSize = 0;
+    int nLen;
+    int nSent;
+    int nRes;
+
+    if (!pstShip->nHasVoyage) {
+        printF("Error: you have no active voyage.\n");
+        return -1;
+    }
+    if (pstShip->stVoyage.nDelivered) {
+        printF("Error: the object has already been delivered. Return to Ithaca to claim the reward.\n");
+        return -1;
+    }
+    if (!isDocked(pstShip)) {
+        printF("Error: you are not docked at any island.\n");
+        return -1;
+    }
+    if (strcasecmp(pstShip->psLocation, pstShip->stVoyage.psDestination) != 0) {
+        if (asprintf(&psMsg, "Error: %s is not the destination of the voyage (%s).\n",
+                     pstShip->psLocation, pstShip->stVoyage.psDestination) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
+        return -1;
+    }
+    // Checked before sending anything, so a missing file is just an error message
+    if (pstShip->stVoyage.psObjectPath == NULL ||
+        prepareFile(pstShip->stVoyage.psObjectPath, &nSize, sMd5) != 0) {
+        printF("Error: the object is missing from the cargo.\n");
+        return -1;
+    }
+
+    if (asprintf(&psMsg, "Delivering %s to %s...\n", pstShip->stVoyage.psObject, pstShip->psLocation) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+
+    // DELIVER request: "<VoyageID>&<Object>"
+    nLen = asprintf(&psRequest, "%d&%s", pstShip->stVoyage.nId, pstShip->stVoyage.psObject);
+    if (nLen < 0) {
+        printE("Error: out of memory.\n");
+        return -1;
+    }
+    nSent = sendFrame(pstShip->nIslandFd, TYPE_DELIVER, FLAG_REQUEST, psRequest, nLen);
+    free(psRequest);
+    if (nSent != 0) {
+        return islandLost(pstShip);
+    }
+
+    // DELIVERY transfer: Odysseus sends as a client
+    nRes = sendFile(pstShip->nIslandFd, "DELIVERY", pstShip->stVoyage.psObjectPath, nSize, sMd5, 0);
+    if (nRes == TRANSFER_LOST) {
+        return islandLost(pstShip);
+    }
+    if (nRes == TRANSFER_OK) {
+        psMsg = NULL;
+        if (asprintf(&psMsg, "Object transferred correctly.\n\n%s is stamping the object...\n", pstShip->psLocation) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
+    }
+
+    // Next comes the stamped image, or the final answer if something failed
+    if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
+        return islandLost(pstShip);
+    }
+    if (nRes == TRANSFER_OK && stFrame.ucType == TYPE_FILE_HEADER) {
+        nRes = receiveFileFrom(pstShip->nIslandFd, &stFrame, "SIGNED", pstShip->stConfig.psFilePath, &psSigned);
+        if (nRes == TRANSFER_LOST || recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
+            free(psSigned);
+            return islandLost(pstShip);
+        }
+    }
+    if (stFrame.ucType != TYPE_DELIVER) {
+        free(psSigned);
+        return islandLost(pstShip);
+    }
+
+    frameDataToString(&stFrame, sData, sizeof(sData));
+    if (stFrame.ucFlags != FLAGS_OK) {
+        // The reason sent by the island
+        sayError(sData);
+        free(psSigned);
+        return -1;
+    }
+    if (psSigned == NULL) {
+        sayError("the stamped object was not received");
+        return -1;
+    }
+
+    free(pstShip->stVoyage.psSignedPath);
+    pstShip->stVoyage.psSignedPath = psSigned;
+    pstShip->stVoyage.nDelivered = 1;
+
+    psMsg = NULL;
+    if (asprintf(&psMsg, "Stamped object received.\n\nDelivery completed.\nThe mark of %s has been obtained.\n",
+                 pstShip->psLocation) < 0) {
         psMsg = NULL;
     }
     printAndFree(psMsg);

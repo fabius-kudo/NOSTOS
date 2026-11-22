@@ -278,7 +278,7 @@ void executeCommand(tShip *pstShip, tCmdId eId, int nArgc, char *ppsArgs[]) {
         case CMD_BUY: cmdBuy(pstShip, nArgc, ppsArgs); break;
         case CMD_SELL: cmdSell(pstShip, nArgc, ppsArgs); break;
         case CMD_STATUS: cmdStatus(pstShip, nArgc, ppsArgs); break;
-        case CMD_DELIVER:
+        case CMD_DELIVER: cmdDeliver(pstShip, nArgc, ppsArgs); break;
         case CMD_CLAIM:
         case CMD_UNKNOWN:
             break;                 // not implemented yet

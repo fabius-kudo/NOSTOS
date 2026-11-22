@@ -51,7 +51,9 @@ typedef struct {
     char *psObject;
     char *psDestination;
     int nReward;
-    char *psObjectPath;
+    char *psObjectPath;     // object image received from Ithaca, NULL if none
+    char *psSignedPath;     // stamped image received from the island, NULL until delivered
+    int nDelivered;         // 1 once the island has stamped the object
 } tActiveVoyage;
 
 // An island the ship knows how to reach

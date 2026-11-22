@@ -9,13 +9,14 @@
 #ifndef CODE_ISLAND_SERVICE_H
 #define CODE_ISLAND_SERVICE_H
 
-// System Includes
+// Proj Includes
 #include "port_control.h"
 #include "protocol.h"
 #include "socket_utils.h"
 #include "island_stock.h"
 #include "custom_io.h"
 #include "port_config.h"
+#include "file_transfer.h"
 
 // Custom Type Definitions
 typedef struct {
