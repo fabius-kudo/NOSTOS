@@ -18,7 +18,7 @@
  * @Ret: Returns 0 on success, -1 on error.
  *
  ***********************************************/
-static int saveStock(const tStock *pstStock) {
+int saveStock(const tStock *pstStock) {
     size_t nBytes = sizeof(tProduct) * (size_t)pstStock->nNumProducts;
     int nFd = open(pstStock->psPath, O_WRONLY | O_TRUNC);
     int nRet = 0;
@@ -42,7 +42,7 @@ static int saveStock(const tStock *pstStock) {
  * @Ret: Returns a pointer to the product, or NULL if it is not found.
  *
  ***********************************************/
-static tProduct *findProduct(tStock *pstStock, const char *psName) {
+tProduct *findProduct(tStock *pstStock, const char *psName) {
     for (int i = 0; i < pstStock->nNumProducts; i++) {
         if (strcasecmp(pstStock->pstProducts[i].sName, psName) == 0) {
             return &pstStock->pstProducts[i];

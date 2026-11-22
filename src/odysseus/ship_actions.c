@@ -19,7 +19,7 @@
  * @Arg: In: psReason text of the error (often the reason sent by a server)
  * @Ret: None.
  ***********************************************/
-static void sayError(const char *psReason) {
+void sayError(const char *psReason) {
     char *psMsg = NULL;
     if (asprintf(&psMsg, "Error: %s\n", psReason) < 0) {
         psMsg = NULL;                       // contents are undefined when asprintf fails
@@ -35,7 +35,7 @@ static void sayError(const char *psReason) {
  *       In: psWho who the connection was with
  * @Ret: None.
  ***********************************************/
-static void reportLost(const tShip *pstShip, const char *psWho) {
+void reportLost(const tShip *pstShip, const char *psWho) {
     char *psMsg = NULL;
 
     if (pstShip->pnStop != NULL && *pstShip->pnStop) {
@@ -56,7 +56,7 @@ static void reportLost(const tShip *pstShip, const char *psWho) {
  * @Arg: In: pstShip ship state
  * @Ret: None.
  ***********************************************/
-static void saveState(const tShip *pstShip) {
+void saveState(const tShip *pstShip) {
     if (saveShipState(pstShip) != 0) {
         printF("Warning: the progress of the ship could not be saved.\n");
     }
@@ -69,7 +69,7 @@ static void saveState(const tShip *pstShip) {
  *       In: psName new location
  * @Ret: 0 on success, -1 if memory could not be allocated (location unchanged).
  ***********************************************/
-static int setLocation(tShip *pstShip, const char *psName) {
+int setLocation(tShip *pstShip, const char *psName) {
     char *psCopy = dupString(psName);
     if (psCopy == NULL) {
         return -1;
@@ -90,7 +90,7 @@ static int setLocation(tShip *pstShip, const char *psName) {
  *       In: nReward gold paid on completion
  * @Ret: 0 on success, -1 if memory could not be allocated (voyage unchanged).
  ***********************************************/
-static int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *psDest, int nReward) {
+int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *psDest, int nReward) {
     char *psObjCopy = dupString(psObject);
     char *psDestCopy = dupString(psDest);
 
@@ -120,7 +120,7 @@ static int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *
  * @Arg: In/Out: pstShip ship to update
  * @Ret: None.
  ***********************************************/
-static void clearVoyage(tShip *pstShip) {
+void clearVoyage(tShip *pstShip) {
     free(pstShip->stVoyage.psObject);
     free(pstShip->stVoyage.psDestination);
     free(pstShip->stVoyage.psObjectPath);
@@ -174,7 +174,7 @@ void releaseShip(tShip *pstShip) {
  * @Arg: In/Out: pstShip ship that leaves
  * @Ret: None.
  ***********************************************/
-static void leaveCurrentPort(tShip *pstShip) {
+void leaveCurrentPort(tShip *pstShip) {
     tFrame stReply;
     int *pnFd;
     unsigned char ucType;
@@ -436,7 +436,7 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
  *       In: psName island name
  * @Ret: Pointer to the island, or NULL if unknown.
  ***********************************************/
-static const tKnownIsland *findKnownIsland(const tShip *pstShip, const char *psName) {
+const tKnownIsland *findKnownIsland(const tShip *pstShip, const char *psName) {
     for (int i = 0; i < pstShip->nNumIslands; i++) {
         if (strcasecmp(pstShip->pstIslands[i].sName, psName) == 0) {
             return &pstShip->pstIslands[i];
@@ -453,7 +453,7 @@ static const tKnownIsland *findKnownIsland(const tShip *pstShip, const char *psN
  *       In: psFrom, psTo the two islands
  * @Ret: 1 if a direct route is known, 0 otherwise.
  ***********************************************/
-static int isDirectRoute(const tShip *pstShip, const char *psFrom, const char *psTo) {
+int isDirectRoute(const tShip *pstShip, const char *psFrom, const char *psTo) {
     for (int i = 0; i < pstShip->nNumRoutes; i++) {
         const tKnownRoute *pstR = &pstShip->pstRoutes[i];
         if ((strcasecmp(pstR->sA, psFrom) == 0 && strcasecmp(pstR->sB, psTo) == 0) ||
@@ -470,7 +470,7 @@ static int isDirectRoute(const tShip *pstShip, const char *psFrom, const char *p
  * @Arg: In: pstShip ship state
  * @Ret: Total provisions in kilograms.
  ***********************************************/
-static int totalProvisions(const tShip *pstShip) {
+int totalProvisions(const tShip *pstShip) {
     int nTotal = 0;
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems; i++) {
         nTotal += pstShip->stConfig.pstFoodSupplies[i].nQuantity;
@@ -486,7 +486,7 @@ static int totalProvisions(const tShip *pstShip) {
  *       In: nKg kilograms to consume
  * @Ret: None.
  ***********************************************/
-static void consumeProvisions(tShip *pstShip, int nKg) {
+void consumeProvisions(tShip *pstShip, int nKg) {
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems && nKg > 0; i++) {
         tFood *pstFood = &pstShip->stConfig.pstFoodSupplies[i];
         if (pstFood->nQuantity < nKg) {
@@ -505,7 +505,7 @@ static void consumeProvisions(tShip *pstShip, int nKg) {
  *       Monotonic means it never jumps if the system clock is changed.
  * @Ret: Milliseconds since an arbitrary fixed point.
  ***********************************************/
-static long nowMs(void) {
+long nowMs(void) {
     struct timespec stTs;
     clock_gettime(CLOCK_MONOTONIC, &stTs);
     return stTs.tv_sec * 1000L + stTs.tv_nsec / 1000000L;
@@ -522,7 +522,7 @@ static long nowMs(void) {
  * @Ret: 1 if the ship docked, 0 otherwise (lost at sea, connection lost or
  *       interrupted). In every 0 case the island socket is closed.
  ***********************************************/
-static int waitForDocking(tShip *pstShip, const char *psIsland) {
+int waitForDocking(tShip *pstShip, const char *psIsland) {
     struct pollfd astFds[1];
     tFrame stFrame;
     char sData[FRAME_DATA_SIZE + 1];
@@ -822,7 +822,7 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
  * @Arg: In: pstShip ship state
  * @Ret: 1 if docked at an island, 0 otherwise.
  ***********************************************/
-static int isDocked(const tShip *pstShip) {
+int isDocked(const tShip *pstShip) {
     return pstShip->nIslandFd >= 0 && pstShip->psLocation != NULL
            && strcasecmp(pstShip->psLocation, "Ithaca") != 0;
 }
@@ -833,7 +833,7 @@ static int isDocked(const tShip *pstShip) {
  * @Arg: In/Out: pstShip ship state
  * @Ret: Always -1, so callers can write "return islandLost(pstShip);".
  ***********************************************/
-static int islandLost(tShip *pstShip) {
+int islandLost(tShip *pstShip) {
     reportLost(pstShip, "the island");
     closeSocket(&pstShip->nIslandFd);
     return -1;
@@ -846,7 +846,7 @@ static int islandLost(tShip *pstShip) {
  *       In: psName product name
  * @Ret: Index of the product in the cargo, or -1 if not carried.
  ***********************************************/
-static int findCargo(const tShip *pstShip, const char *psName) {
+int findCargo(const tShip *pstShip, const char *psName) {
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems; i++) {
         if (strcasecmp(pstShip->stConfig.pstFoodSupplies[i].psProduct, psName) == 0) {
             return i;
@@ -864,7 +864,7 @@ static int findCargo(const tShip *pstShip, const char *psName) {
  *       In: nKg kilograms to add
  * @Ret: 0 on success, -1 if memory could not be allocated.
  ***********************************************/
-static int addCargo(tShip *pstShip, const char *psName, int nKg) {
+int addCargo(tShip *pstShip, const char *psName, int nKg) {
     int nIdx = findCargo(pstShip, psName);
     tFood *pstNew;
     char *psCopy;
@@ -901,7 +901,7 @@ static int addCargo(tShip *pstShip, const char *psName, int nKg) {
  *       Out: pnPrice price per kilogram, if found
  * @Ret: 1 if found, 0 if the island does not sell it, -1 on error.
  ***********************************************/
-static int queryPrice(tShip *pstShip, const char *psProduct, int *pnPrice) {
+int queryPrice(tShip *pstShip, const char *psProduct, int *pnPrice) {
     tFrame stFrame;
     char sData[FRAME_DATA_SIZE + 1];
     int nIndex = 0;
@@ -953,7 +953,7 @@ static int queryPrice(tShip *pstShip, const char *psProduct, int *pnPrice) {
  *       Out: pstReply reply frame from the island
  * @Ret: 0 if a reply was received, -1 on error (message already printed).
  ***********************************************/
-static int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProduct, int nAmount, tFrame *pstReply) {
+int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProduct, int nAmount, tFrame *pstReply) {
     char *psData = NULL;
     int nLen = asprintf(&psData, "%s&%d", psProduct, nAmount);
     int nRet;
@@ -980,7 +980,7 @@ static int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProd
  *       Out: pnMoney cost (BUY) or income (SELL)
  * @Ret: 0 on success, -1 if the reply is malformed.
  ***********************************************/
-static int parseTradeReply(char *psData, char **ppsProduct, int *pnAmount, int *pnMoney) {
+int parseTradeReply(char *psData, char **ppsProduct, int *pnAmount, int *pnMoney) {
     char *psOk = strtok(psData, "&");
     char *psAmount;
     char *psMoney;
@@ -1138,7 +1138,7 @@ int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]) {
  *       In: psName, psIp, nPort island name and address
  * @Ret: 0 on success or if already known, -1 if memory could not be allocated.
  ***********************************************/
-static int addKnownIsland(tShip *pstShip, const char *psName, const char *psIp, int nPort) {
+int addKnownIsland(tShip *pstShip, const char *psName, const char *psIp, int nPort) {
     if (findKnownIsland(pstShip, psName) != NULL) {
         return 0;
     }
@@ -1170,7 +1170,7 @@ static int addKnownIsland(tShip *pstShip, const char *psName, const char *psIp, 
  *       In: psA, psB the two islands
  * @Ret: 1 if the route is new, 0 if already known, -1 on memory error.
  ***********************************************/
-static int addKnownRoute(tShip *pstShip, const char *psA, const char *psB) {
+int addKnownRoute(tShip *pstShip, const char *psA, const char *psB) {
     if (isDirectRoute(pstShip, psA, psB)) {
         return 0;
     }
@@ -1581,7 +1581,7 @@ int cmdDeliver(tShip *pstShip, int nArgc, char *ppsArgv[]) {
  * @Arg: In/Out: pstShip ship state
  * @Ret: Always -1, so callers can write "return ithacaLost(pstShip);".
  ***********************************************/
-static int ithacaLost(tShip *pstShip) {
+int ithacaLost(tShip *pstShip) {
     reportLost(pstShip, "Ithaca");
     closeSocket(&pstShip->nIthacaFd);
     return -1;
