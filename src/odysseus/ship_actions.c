@@ -660,9 +660,7 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     if (pstShip->nHasVoyage && !pstShip->stVoyage.nDelivered &&
         strcasecmp(pstDest->sName, pstShip->stVoyage.psDestination) == 0) {
         psMsg = NULL;
-        if (asprintf(&psMsg, "\n>>> We have reached %s, the destination of our voyage.\n"
-                             "Use DELIVER to hand over the %s.\n",
-                     pstDest->sName, pstShip->stVoyage.psObject) < 0) {
+        if (asprintf(&psMsg, "\n>>> We have reached the destination: %s\n", pstDest->sName) < 0) {
             psMsg = NULL;
         }
         printAndFree(psMsg);

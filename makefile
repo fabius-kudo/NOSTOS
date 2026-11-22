@@ -50,7 +50,7 @@ build/odysseus.o: src/odysseus.c $(ODY)/ship_config.h $(ODY)/ship_actions.h $(OD
 build/voyage_config.o: $(ITH)/voyage_config.c $(ITH)/voyage_config.h $(UTIL)/custom_io.h $(UTIL)/file_transfer.h
 	gcc $(CFLAGS) -c $(ITH)/voyage_config.c -o build/voyage_config.o
 
-build/voyage_service.o: $(ITH)/voyage_service.c $(ITH)/voyage_service.h $(ITH)/voyage_config.h $(UTIL)/protocol.h $(UTIL)/socket_utils.h
+build/voyage_service.o: $(ITH)/voyage_service.c $(ITH)/voyage_service.h $(ITH)/voyage_config.h $(UTIL)/protocol.h $(UTIL)/socket_utils.h $(SPHRAGIS)/sphragis.h
 	gcc $(CFLAGS) -c $(ITH)/voyage_service.c -o build/voyage_service.o
 
 build/ithaca.o: src/ithaca.c $(ITH)/voyage_config.h $(ITH)/voyage_service.h $(UTIL)/socket_utils.h $(UTIL)/custom_io.h
@@ -79,8 +79,8 @@ odysseus: build/odysseus.o build/ship_config.o build/commands.o build/ship_actio
 island: build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_io.o build/client_list.o build/file_transfer.o $(SPHRAGIS)/sphragis.o
 	gcc build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_io.o build/client_list.o build/file_transfer.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o island -lpthread
 
-ithaca: build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o build/client_list.o build/file_transfer.o
-	gcc build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o build/client_list.o build/file_transfer.o $(CFLAGS) -o ithaca -lpthread
+ithaca: build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o build/client_list.o build/file_transfer.o $(SPHRAGIS)/sphragis.o
+	gcc build/ithaca.o build/voyage_config.o build/voyage_service.o build/protocol.o build/custom_io.o build/socket_utils.o build/client_list.o build/file_transfer.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o ithaca -lpthread
 
 clean:
 	rm -f build/*.o odysseus island ithaca
