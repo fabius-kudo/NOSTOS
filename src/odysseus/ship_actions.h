@@ -43,6 +43,7 @@ int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdDeliver(tShip *pstShip, int nArgc, char *ppsArgv[]);
+int cmdClaim(tShip *pstShip, int nArgc, char *ppsArgv[]);
 
 // --- Local commands (no frames sent) ---
 int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]);

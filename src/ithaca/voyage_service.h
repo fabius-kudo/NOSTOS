@@ -20,6 +20,9 @@
 // Project Includes
 #include "protocol.h"
 #include "voyage_config.h"
+#include "custom_io.h"
+#include "file_transfer.h"
+#include "SPHRAGIS Library-20260917/sphragis.h"
 
 // Custom Type Definitions
 typedef enum {

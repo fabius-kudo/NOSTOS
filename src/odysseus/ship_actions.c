@@ -185,7 +185,7 @@ int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     if (pstShip->nIslandFd >= 0) {
     char *psMsg = NULL;
-    if (asprintf(&psMsg, "Leaving %s...\n",
+    if (asprintf(&psMsg, "Leaving %s...\nReturning directly to Ithaca...\n",
                  pstShip->psLocation ? pstShip->psLocation : "port") < 0) {
         psMsg = NULL;
     }
@@ -660,7 +660,8 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     if (pstShip->nHasVoyage && !pstShip->stVoyage.nDelivered &&
         strcasecmp(pstDest->sName, pstShip->stVoyage.psDestination) == 0) {
         psMsg = NULL;
-        if (asprintf(&psMsg, "\n>>> We have reached the destination: %s\n",
+        if (asprintf(&psMsg, "\n>>> We have reached %s, the destination of our voyage.\n"
+                             "Use DELIVER to hand over the %s.\n",
                      pstDest->sName, pstShip->stVoyage.psObject) < 0) {
             psMsg = NULL;
         }
@@ -1513,5 +1514,112 @@ int cmdDeliver(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         psMsg = NULL;
     }
     printAndFree(psMsg);
+    return 0;
+}
+
+/***********************************************
+ * @Name: ithacaLost
+ * @Def: Reports a lost connection with Ithaca and closes the socket.
+ * @Arg: In/Out: pstShip ship state
+ * @Ret: Always -1, so callers can write "return ithacaLost(pstShip);".
+ ***********************************************/
+static int ithacaLost(tShip *pstShip) {
+    printF("Error: connection to Ithaca lost.\n");
+    closeSocket(&pstShip->nIthacaFd);
+    return -1;
+}
+
+/***********************************************
+ * @Name: cmdClaim
+ * @Def: CLAIM. Only when connected to Ithaca after delivering the object.
+ *       Sends the stamped image (CLAIM transfer) as proof of the delivery;
+ *       if Ithaca accepts it, the reward is added to the gold and the voyage
+ *       ends.
+ * @Arg: In/Out: pstShip ship state (must be connected to Ithaca)
+ *       In: nArgc, ppsArgv unused
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
+int cmdClaim(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+    (void)ppsArgv;
+
+    tFrame stFrame;
+    char sData[FRAME_DATA_SIZE + 1];
+    char sMd5[MD5_LENGTH + 1];
+    char sId[FRAME_DATA_SIZE + 1];
+    char *psMsg = NULL;
+    char *psOk;
+    char *psReward;
+    int nSize = 0;
+    int nLen;
+    int nReward;
+    int nRes;
+
+    if (pstShip->nIthacaFd < 0) {
+        printF("Error: not connected to Ithaca.\n");
+        return -1;
+    }
+    if (!pstShip->nHasVoyage) {
+        printF("Error: you have no active voyage.\n");
+        return -1;
+    }
+    if (!pstShip->stVoyage.nDelivered) {
+        printF("Error: the object has not been delivered yet.\n");
+        return -1;
+    }
+    // Checked before sending anything, so a missing file is just an error message
+    if (pstShip->stVoyage.psSignedPath == NULL ||
+        prepareFile(pstShip->stVoyage.psSignedPath, &nSize, sMd5) != 0) {
+        printF("Error: the stamped object is missing from the cargo.\n");
+        return -1;
+    }
+
+    if (asprintf(&psMsg, "Presenting the stamped %s...\n", pstShip->stVoyage.psObject) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+
+    // CLAIM request: "<VoyageID>"
+    nLen = snprintf(sId, sizeof(sId), "%d", pstShip->stVoyage.nId);
+    if (sendFrame(pstShip->nIthacaFd, TYPE_CLAIM, FLAG_REQUEST, sId, nLen) != 0) {
+        return ithacaLost(pstShip);
+    }
+
+    // CLAIM transfer: Odysseus sends as a client
+    nRes = sendFile(pstShip->nIthacaFd, "CLAIM", pstShip->stVoyage.psSignedPath, nSize, sMd5, 0);
+    if (nRes == TRANSFER_LOST) {
+        return ithacaLost(pstShip);
+    }
+    if (nRes == TRANSFER_OK) {
+        printF("\nObject transferred correctly.\n");
+    }
+
+    // Ithaca's verdict: OK&<Reward>, or the reason of the rejection
+    if (recvFrame(pstShip->nIthacaFd, &stFrame) != 1 || stFrame.ucType != TYPE_CLAIM) {
+        return ithacaLost(pstShip);
+    }
+    frameDataToString(&stFrame, sData, sizeof(sData));
+    if (stFrame.ucFlags != FLAGS_OK) {
+        sayError(sData);
+        return -1;
+    }
+    psOk = strtok(sData, "&");
+    psReward = strtok(NULL, "&");
+    if (psOk == NULL || psReward == NULL) {
+        printF("Error: malformed reply from Ithaca.\n");
+        return -1;
+    }
+    nReward = atoi(psReward);
+    pstShip->nMoney += nReward;
+
+    psMsg = NULL;
+    if (asprintf(&psMsg, "Glyph of %s verified.\n\nVoyage %d completed.\nReward received: %d gold.\n",
+                 pstShip->stVoyage.psDestination, pstShip->stVoyage.nId, nReward) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+
+    // The mission is over: the ship can accept a new voyage
+    clearVoyage(pstShip);
     return 0;
 }
