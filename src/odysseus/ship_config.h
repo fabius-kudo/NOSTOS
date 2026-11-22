@@ -85,7 +85,7 @@ typedef struct {
     int nNumRoutes;
     int nShouldExit;
 
-    int *pnStop;    // CTRL+C flag of main, checked during file transfers
+    int *pnStop;    //CTRL+C flag of main for files
 } tShip;
 
 tOdysseus parseOdysseus(char *psConfigPath);

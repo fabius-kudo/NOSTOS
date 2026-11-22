@@ -133,17 +133,15 @@ int main(int argc, char *argv[]) {
         free(psLine);
     }
 
+    // A ship with nothing left cannot continue: the next execution starts fresh
+    if (isStranded(&stShip)) {
+        deleteShipState(&stShip);
+        write(STDOUT_FILENO, "\nWith no gold and no provisions, the journey is over.\n",
+              strlen("\nWith no gold and no provisions, the journey is over.\n"));
+    }
+
     write(STDOUT_FILENO, "\nOdysseus stops his journey.\n", strlen("\nOdysseus stops his journey.\n"));
 
-    releaseShip(&stShip);
-    if (stShip.nIthacaFd >= 0) close(stShip.nIthacaFd);
-    if (stShip.nIslandFd >= 0) close(stShip.nIslandFd);
-    free(stShip.psLocation);
-
-    if (gnStop) {
-        signal(SIGINT, SIG_DFL);
-        raise(SIGINT);
-    }
     releaseShip(&stShip);
     return 0;
 }

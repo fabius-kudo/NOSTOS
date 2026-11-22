@@ -234,24 +234,6 @@ int sendFile(int nFd, const char *psKind, const char *psPath, int nSize, const c
     return TRANSFER_OK;
 }
 
-/***********************************************
- *
- * @Name: isSafeName
- * @Def: Checks that a file name received from the network is a plain name,
- *       so it cannot write outside the folder of the process.
- * @Arg: In: psName file name from the header
- * @Ret: Returns 1 if the name can be used, 0 otherwise.
- *
- ***********************************************/
-int isSafeName(const char *psName) {
-    if (psName[0] == '\0' || strchr(psName, '/') != NULL) {
-        return 0;
-    }
-    if (strcmp(psName, ".") == 0 || strcmp(psName, "..") == 0) {
-        return 0;
-    }
-    return 1;
-}
 
 /***********************************************
  *
@@ -362,7 +344,7 @@ int receiveFileFrom(int nFd, const tFrame *pstHeader, const char *psKind, const 
     psSize = strtok(NULL, "&");
     psMd5 = strtok(NULL, "&");
     if (psFileKind == NULL || psName == NULL || psSize == NULL || psMd5 == NULL ||
-        strcmp(psFileKind, psKind) != 0 || !isSafeName(psName) || !isMd5Text(psMd5) || atoi(psSize) <= 0) {
+        strcmp(psFileKind, psKind) != 0 || !isMd5Text(psMd5) || atoi(psSize) <= 0) {
         // Nothing has been sent yet
         sendTextFrame(nFd, TYPE_FILE_READY, FLAGS_ERR, "INVALID_HEADER");
         return TRANSFER_REJECTED;

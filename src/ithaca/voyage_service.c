@@ -416,7 +416,6 @@ int checkClaimedImage(tVoyage *pstVoyage, char *psPath) {
     }
 
     if (SPHRAGIS_has_glyph(pstVoyage->psDestination, psPath) != 1) {
-        // Says which island stamped it, if any, to make the failure clear
         psFound = SPHRAGIS_identify_glyph(psPath);
         if (psFound != NULL) {
             if (asprintf(&psMsg, ">>> Glyph of %s found instead of the glyph of %s.\n",
