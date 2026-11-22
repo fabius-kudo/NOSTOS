@@ -34,16 +34,19 @@ build/file_transfer.o: $(UTIL)/file_transfer.c $(UTIL)/file_transfer.h $(UTIL)/p
 	gcc $(CFLAGS) -c $(UTIL)/file_transfer.c -o build/file_transfer.o
 
 # ---------- odysseus ----------
+build/ship_state.o: $(ODY)/ship_state.c $(ODY)/ship_state.h $(ODY)/ship_config.h
+	gcc $(CFLAGS) -c $(ODY)/ship_state.c -o build/ship_state.o
+
 build/ship_config.o: $(ODY)/ship_config.c $(ODY)/ship_config.h $(UTIL)/custom_io.h
 	gcc $(CFLAGS) -c $(ODY)/ship_config.c -o build/ship_config.o
 
-build/ship_actions.o: $(ODY)/ship_actions.c $(ODY)/ship_actions.h $(ODY)/ship_config.h $(UTIL)/protocol.h $(UTIL)/socket_utils.h $(UTIL)/custom_io.h $(UTIL)/file_transfer.h
+build/ship_actions.o: $(ODY)/ship_actions.c $(ODY)/ship_actions.h $(ODY)/ship_config.h $(UTIL)/protocol.h $(UTIL)/socket_utils.h $(UTIL)/custom_io.h $(UTIL)/file_transfer.h $(ODY)/ship_state.h
 	gcc $(CFLAGS) -c $(ODY)/ship_actions.c -o build/ship_actions.o
 
 build/commands.o: $(ODY)/commands.c $(ODY)/commands.h $(ODY)/ship_actions.h $(ODY)/ship_config.h
 	gcc $(CFLAGS) -c $(ODY)/commands.c -o build/commands.o
 
-build/odysseus.o: src/odysseus.c $(ODY)/ship_config.h $(ODY)/ship_actions.h $(ODY)/commands.h $(UTIL)/custom_io.h
+build/odysseus.o: src/odysseus.c $(ODY)/ship_config.h $(ODY)/ship_actions.h $(ODY)/commands.h $(UTIL)/custom_io.h $(ODY)/ship_state.h
 	gcc $(CFLAGS) -c src/odysseus.c -o build/odysseus.o
 
 # ---------- ithaca ----------
@@ -73,8 +76,8 @@ build/island.o: src/island.c $(ISL)/port_config.h $(ISL)/port_control.h $(ISL)/i
 	gcc $(CFLAGS) -c src/island.c -o build/island.o
 
 # ---------- executables  ----------
-odysseus: build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_io.o build/file_transfer.o $(SPHRAGIS)/sphragis.o
-	gcc build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_io.o build/file_transfer.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o odysseus -lpthread
+odysseus: build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_io.o build/file_transfer.o build/ship_state.o $(SPHRAGIS)/sphragis.o
+	gcc build/odysseus.o build/ship_config.o build/commands.o build/ship_actions.o build/protocol.o build/socket_utils.o build/custom_io.o build/file_transfer.o build/ship_state.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o odysseus -lpthread
 
 island: build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_io.o build/client_list.o build/file_transfer.o $(SPHRAGIS)/sphragis.o
 	gcc build/island.o build/port_config.o build/port_control.o build/island_stock.o build/island_service.o build/protocol.o build/socket_utils.o build/custom_io.o build/client_list.o build/file_transfer.o $(SPHRAGIS)/sphragis.o $(CFLAGS) -o island -lpthread

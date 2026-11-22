@@ -20,6 +20,7 @@
 #include "custom_io.h"
 #include "commands.h"
 #include "ship_config.h"
+#include "ship_state.h"
 
 int gnStop = 0;
 
@@ -40,6 +41,46 @@ void handleExit(int nSig) {
 
 /***********************************************
  *
+ * @Name: reportRestore
+ * @Def: Tells the player whether the progress of a previous execution was
+ *       restored, and how to get back into port.
+ * @Arg: In: pstShip ship state after loading
+ *       In: nRes result of loadShipState
+ * @Ret: None.
+ *
+ ***********************************************/
+void reportRestore(const tShip *pstShip, int nRes) {
+    char *psMsg = NULL;
+
+    if (nRes == STATE_DAMAGED) {
+        printF("Warning: the saved progress could not be read. Starting from the configuration.\n");
+        return;
+    }
+    if (nRes == STATE_NONE) {
+        return;
+    }
+
+    printF("Previous journey restored.\n");
+    if (nRes == STATE_VOYAGE_LOST) {
+        printF("The object of the voyage is no longer on board: the voyage has been lost.\n");
+    }
+    if (pstShip->psLocation == NULL) {
+        return;
+    }
+    // The ship is not connected anywhere until it reconnects
+    if (strcasecmp(pstShip->psLocation, "Ithaca") == 0) {
+        if (asprintf(&psMsg, "Current location: Ithaca (not connected). Use CONNECT ITHACA to reconnect.\n") < 0) {
+            psMsg = NULL;
+        }
+    } else if (asprintf(&psMsg, "Current location: %s (not docked). Use SAIL %s to enter its port again.\n",
+                        pstShip->psLocation, pstShip->psLocation) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+}
+
+/***********************************************
+ *
  * @Name: main
  * @Def: Main entry point for the Odysseus application.
  * @Arg: In: argc number of command line arguments
@@ -49,6 +90,7 @@ void handleExit(int nSig) {
  ***********************************************/
 int main(int argc, char *argv[]) {
     int nTokenCount = 0;
+    int nRestore;
     char *psLine = NULL;
     char *apsTokens[MAX_ARGS];
     tShip stShip;
@@ -69,13 +111,18 @@ int main(int argc, char *argv[]) {
         write(STDERR_FILENO, "Error: out of memory\n", strlen("Error: out of memory\n"));
         return EXIT_FAILURE;
     }
+    // Set after initShip, which clears the whole ship
     stShip.pnStop = &gnStop;
+
+    // Continue from a previous execution, if its progress was saved
+    nRestore = loadShipState(&stShip);
 
     char *psMsg = NULL;
     if (asprintf(&psMsg, "Odysseus %s is ready to sail.\n", stShip.stConfig.psName) >= 0) {
         write(STDOUT_FILENO, psMsg, strlen(psMsg));
         free(psMsg);
     }
+    reportRestore(&stShip, nRestore);
 
     while (!gnStop && !stShip.nShouldExit) {
         write(STDOUT_FILENO, "\n$ ", strlen("\n$ "));

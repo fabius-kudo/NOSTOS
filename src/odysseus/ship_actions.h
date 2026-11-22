@@ -23,6 +23,7 @@
 #include "SPHRAGIS Library-20260917/sphragis.h"
 #include "custom_io.h"
 #include "file_transfer.h"
+#include "ship_state.h"
 
 // Constants
 #define RATION_INTERVAL_MS 5000     // while waiting offshore, one ration is eaten every full 5 s

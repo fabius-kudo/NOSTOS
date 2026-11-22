@@ -49,6 +49,20 @@ static void reportLost(const tShip *pstShip, const char *psWho) {
 }
 
 /***********************************************
+ * @Name: saveState
+ * @Def: Saves the progress of the ship after a change, so a later execution
+ *       can continue from here. Only warns if it fails: the change itself
+ *       has already happened.
+ * @Arg: In: pstShip ship state
+ * @Ret: None.
+ ***********************************************/
+static void saveState(const tShip *pstShip) {
+    if (saveShipState(pstShip) != 0) {
+        printF("Warning: the progress of the ship could not be saved.\n");
+    }
+}
+
+/***********************************************
  * @Name: setLocation
  * @Def: Replaces the ship's current location with a heap copy of the name.
  * @Arg: In/Out: pstShip ship to update
@@ -240,6 +254,7 @@ int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return -1;
     }
     pstShip->nIthacaFd = nFd;
+    saveState(pstShip);
     printF("Connected to Ithaca.\n");
     return 0;
 }
@@ -405,6 +420,8 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return -1;
     }
     pstShip->stVoyage.psObjectPath = psPath;
+    // Saved only now: the voyage counts once its object is on board
+    saveState(pstShip);
     printF("Object transferred correctly.\n");
     return 0;
 }
@@ -552,6 +569,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
 
         consumeProvisions(pstShip, RATION_KG);
         nNextRation += RATION_INTERVAL_MS;
+        saveState(pstShip);
 
         psMsg = NULL;
         if (asprintf(&psMsg, "\n>>> The crew consumes another ration.\nProvisions remaining: %d kg\n", totalProvisions(pstShip)) < 0) {
@@ -566,6 +584,8 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
             }
             printAndFree(psMsg);
             closeSocket(&pstShip->nIslandFd);
+            // The mission and the object are lost: the next execution starts fresh
+            deleteShipState(pstShip);
             pstShip->nShouldExit = 1;
             return 0;
         }
@@ -598,11 +618,18 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     int nFromIthaca = (strcasecmp(pstShip->psLocation, "Ithaca") == 0);
     const tKnownIsland *pstDest = findKnownIsland(pstShip, ppsArgv[0]);
+    int nRejoin = 0;
 
-    // From Ithaca only the starting island is valid; from an island, only direct routes
+    // From Ithaca only the starting island is valid; from an island, only direct routes.
+    // A ship that is not connected (restored from a previous execution, or
+    // after a failed SAIL) can also go back into the port it is at.
     int nReachable = 0;
     if (pstDest != NULL) {
-        if (nFromIthaca) {
+        nRejoin = (pstShip->nIslandFd < 0 && pstShip->nIthacaFd < 0 &&
+                   strcasecmp(pstShip->psLocation, pstDest->sName) == 0);
+        if (nRejoin) {
+            nReachable = 1;
+        } else if (nFromIthaca) {
             nReachable = (strcasecmp(pstDest->sName, pstShip->stConfig.psIslandName) == 0);
         } else {
             nReachable = isDirectRoute(pstShip, pstShip->psLocation, pstDest->sName);
@@ -616,7 +643,11 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return -1;
     }
 
-    if (asprintf(&psMsg, "Leaving %s...\nSailing to %s...\n", pstShip->psLocation, pstDest->sName) < 0) {
+    if (nRejoin) {
+        if (asprintf(&psMsg, "Returning to the port of %s...\n", pstDest->sName) < 0) {
+            psMsg = NULL;
+        }
+    } else if (asprintf(&psMsg, "Leaving %s...\nSailing to %s...\n", pstShip->psLocation, pstDest->sName) < 0) {
         psMsg = NULL;
     }
     printAndFree(psMsg);
@@ -676,12 +707,15 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         printF("Error: out of memory.\n");
         return -1;
     }
+    saveState(pstShip);
 
     // Arrived where the object has to be delivered
     if (pstShip->nHasVoyage && !pstShip->stVoyage.nDelivered &&
         strcasecmp(pstDest->sName, pstShip->stVoyage.psDestination) == 0) {
         psMsg = NULL;
-        if (asprintf(&psMsg, "\n>>> We have reached the destination: %s\n",pstDest->sName) < 0) {
+        if (asprintf(&psMsg, "\n>>> We have reached %s, the destination of our voyage.\n"
+                             "Use DELIVER to hand over the %s.\n",
+                     pstDest->sName, pstShip->stVoyage.psObject) < 0) {
             psMsg = NULL;
         }
         printAndFree(psMsg);
@@ -1027,6 +1061,7 @@ int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         printE("Error: out of memory.\n");
         return -1;
     }
+    saveState(pstShip);
     if (asprintf(&psMsg, "Bought %d kg of %s for %d gold.\n", nBoughtKg, psProduct, nCost) < 0) {
         psMsg = NULL;
     }
@@ -1088,6 +1123,7 @@ int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     pstShip->stConfig.pstFoodSupplies[nIdx].nQuantity -= nSoldKg;
     pstShip->nMoney += nIncome;
+    saveState(pstShip);
     if (asprintf(&psMsg, "Sold %d kg of %s for %d gold.\n", nSoldKg, psProduct, nIncome) < 0) {
         psMsg = NULL;
     }
@@ -1250,6 +1286,7 @@ int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         nRoutes += nAdded; 
     }
 
+    saveState(pstShip);
     char *psMsg = NULL;
     if (asprintf(&psMsg, "Bought the map of %s for %d gold.\n%s", pstShip->psLocation, MAP_PRICE, nRoutes > 0 ? "New routes have been charted.\n" : "") < 0) {
         psMsg = NULL;
@@ -1526,6 +1563,8 @@ int cmdDeliver(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     free(pstShip->stVoyage.psSignedPath);
     pstShip->stVoyage.psSignedPath = psSigned;
     pstShip->stVoyage.nDelivered = 1;
+    // Saved only now: the delivery counts once the stamped image is on board
+    saveState(pstShip);
 
     psMsg = NULL;
     if (asprintf(&psMsg, "Stamped object received.\n\nDelivery completed.\nThe mark of %s has been obtained.\n",
@@ -1640,5 +1679,6 @@ int cmdClaim(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     // The mission is over: the ship can accept a new voyage
     clearVoyage(pstShip);
+    saveState(pstShip);
     return 0;
 }
