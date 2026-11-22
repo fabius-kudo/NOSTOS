@@ -9,7 +9,9 @@
 
 #define _GNU_SOURCE
 #include "voyage_service.h"
-
+#include "custom_io.h"
+#include "file_transfer.h"
+#include "SPHRAGIS Library-20260917/sphragis.h"
 
 /***********************************************
  *
@@ -221,22 +223,20 @@ char *objectPath(const tVoyageStore *pstStore, const tVoyage *pstVoyage) {
 
 /***********************************************
  *
- * @Name: releaseVoyage
- * @Def: Makes a voyage available again after its object could not be
- *       delivered to the Odysseus that accepted it.
+ * @Name: failVoyage
+ * @Def: Marks a voyage as failed when its object could not be delivered to
+ *       the Odysseus that accepted it. A failed voyage is no longer offered.
  * @Arg: In/Out: pstStore voyage store
- *       In/Out: pstVoyage voyage to release
+ *       In/Out: pstVoyage voyage that failed
  *       In: psOwner name of the Odysseus it was assigned to
  * @Ret: None.
  *
  ***********************************************/
-void releaseVoyage(tVoyageStore *pstStore, tVoyage *pstVoyage, const char *psOwner) {
+void failVoyage(tVoyageStore *pstStore, tVoyage *pstVoyage, const char *psOwner) {
     pthread_mutex_lock(&pstStore->stMutex);
     if (pstVoyage->eState == VOYAGE_ASSIGNED && pstVoyage->sOwner != NULL &&
         strcmp(pstVoyage->sOwner, psOwner) == 0) {
-        pstVoyage->eState = VOYAGE_AVAILABLE;
-        free(pstVoyage->sOwner);
-        pstVoyage->sOwner = NULL;
+        pstVoyage->eState = VOYAGE_FAILED;
     }
     pthread_mutex_unlock(&pstStore->stMutex);
 }
@@ -250,7 +250,7 @@ void releaseVoyage(tVoyageStore *pstStore, tVoyage *pstVoyage, const char *psOwn
  *       lock, so two ships can never get the same voyage. Replies
  *       OK&ID&Object&Destination&Reward, or an error frame with the reason,
  *       and then sends the object file (OBJECT transfer). If the object
- *       cannot be delivered, the voyage becomes available again.
+ *       cannot be delivered, the voyage is marked as failed.
  * @Arg: In: pstSession session of the requesting client
  *       In: pstFrame received request frame (data = voyage ID)
  * @Ret: None.
@@ -344,7 +344,7 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
     }
 
     if (sendFrame(pstSession->nFd, TYPE_ACCEPT, FLAGS_OK, sReply, nLen) != 0) {
-        releaseVoyage(pstStore, pstVoyage, pstSession->psName);
+        failVoyage(pstStore, pstVoyage, pstSession->psName);
         free(psPath);
         return;
     }
@@ -357,16 +357,16 @@ void handleAccept(tClientSession *pstSession, const tFrame *pstFrame) {
 
     // OBJECT transfer. The lock is not held: it can take a while, and the
     // voyage is already assigned to this ship, so nobody else can take it
-    nRes = sendFile(pstSession->nFd, "OBJECT", psPath, nSize, sMd5, 1);
+    nRes = sendFile(pstSession->nFd, "OBJECT", psPath, nSize, sMd5, 1, NULL);
     free(psPath);
 
     if (nRes == TRANSFER_OK) {
         printF(">>> Object transferred successfully.\n");
         return;
     }
-    // The Odysseus does not have the object, so the voyage is not its
-    releaseVoyage(pstStore, pstVoyage, pstSession->psName);
-    if (asprintf(&psMsg, ">>> The object could not be sent to %s. Voyage %d is available again.\n",
+    // The Odysseus does not have the object: the voyage has failed
+    failVoyage(pstStore, pstVoyage, pstSession->psName);
+    if (asprintf(&psMsg, ">>> The object could not be sent to %s. Voyage %d has failed.\n",
                  pstSession->psName, nId) < 0) {
         psMsg = NULL;
     }
@@ -485,8 +485,9 @@ int handleClaim(tClientSession *pstSession, const tFrame *pstFrame) {
     printAndFree(psMsg);
 
     // CLAIM transfer. The lock is not held: only this Odysseus owns the voyage
-    nRes = receiveFile(pstSession->nFd, "CLAIM", pstStore->psObjectsDir, &psPath);
+    nRes = receiveFile(pstSession->nFd, "CLAIM", pstStore->psObjectsDir, &psPath, NULL);
     if (nRes == TRANSFER_LOST) {
+        printF(">>> The transfer was interrupted. No reward has been granted.\n");
         return -1;
     }
     if (nRes == TRANSFER_REJECTED) {

@@ -84,6 +84,8 @@ typedef struct {
     tKnownRoute *pstRoutes;     
     int nNumRoutes;
     int nShouldExit;
+
+    int *pnStop;    // CTRL+C flag of main, checked during file transfers
 } tShip;
 
 tOdysseus parseOdysseus(char *psConfigPath);

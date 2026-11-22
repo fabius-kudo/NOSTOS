@@ -406,8 +406,9 @@ int handleDeliver(tIslandSession *pstSession, const tFrame *pstFrame) {
     printAndFree(psMsg);
 
     // DELIVERY transfer: the object is stored in the folder of the island
-    nRes = receiveFile(pstSession->nFd, "DELIVERY", pstIsland->psPath, &psReceived);
+    nRes = receiveFile(pstSession->nFd, "DELIVERY", pstIsland->psPath, &psReceived, NULL);
     if (nRes == TRANSFER_LOST) {
+        printF(">>> The transfer was interrupted. Nothing has been accepted.\n");
         return -1;
     }
     if (nRes == TRANSFER_REJECTED) {
@@ -444,9 +445,10 @@ int handleDeliver(tIslandSession *pstSession, const tFrame *pstFrame) {
     printAndFree(psMsg);
 
     // SIGNED transfer: the island sends as a server
-    nRes = sendFile(pstSession->nFd, "SIGNED", psSigned, nSize, sMd5, 1);
+    nRes = sendFile(pstSession->nFd, "SIGNED", psSigned, nSize, sMd5, 1, NULL);
     free(psSigned);
     if (nRes == TRANSFER_LOST) {
+        printF(">>> The transfer was interrupted. The delivery is not confirmed.\n");
         return -1;
     }
     if (nRes == TRANSFER_REJECTED) {

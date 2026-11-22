@@ -13,6 +13,31 @@
 
 #include "file_transfer.h"
 
+// Every transfer follows the same four steps, whoever sends:
+//   sender   -> header 0x20   "<KIND>&<FileName>&<FileSize>&<MD5SUM>"
+//   receiver -> READY 0x22    (or an error with the reason)
+//   sender   -> N data frames 0x21, 253 bytes each except the last one
+//   receiver -> final ACK 0x23 (OK, SIZE_ERROR or MD5_ERROR)
+// Only the flags of the sender change: Ithaca and the islands answer as
+// servers (header 0x80, data 0xA0) and Odysseus sends as a client (header
+// 0x00, data 0x20).
+//
+// A transfer can be stopped (CTRL+C) through a stop flag the caller owns.
+// It is checked between frames: a stopped transfer counts as lost, the
+// caller closes the connection and any partial file is removed, so the
+// other side sees the connection close and never accepts a partial file.
+
+/***********************************************
+ *
+ * @Name: isStopped
+ * @Def: Checks the stop flag of a transfer.
+ * @Arg: In: pnStop stop flag of the caller, or NULL if it has none
+ * @Ret: Returns 1 if the transfer must stop, 0 otherwise.
+ *
+ ***********************************************/
+int isStopped(const int *pnStop) {
+    return pnStop != NULL && *pnStop != 0;
+}
 
 /***********************************************
  *
@@ -151,10 +176,11 @@ const char *baseName(const char *psPath) {
  *       In: nSize size of the file, from prepareFile
  *       In: psMd5 MD5 of the file, from prepareFile
  *       In: nAsServer 1 when Ithaca or an island sends, 0 when Odysseus sends
+ *       In: pnStop stop flag checked between frames, or NULL
  * @Ret: TRANSFER_OK, TRANSFER_REJECTED or TRANSFER_LOST.
  *
  ***********************************************/
-int sendFile(int nFd, const char *psKind, const char *psPath, int nSize, const char *psMd5, int nAsServer) {
+int sendFile(int nFd, const char *psKind, const char *psPath, int nSize, const char *psMd5, int nAsServer, const int *pnStop) {
     unsigned char ucHeaderFlags = nAsServer ? FLAG_RESPONSE : FLAG_REQUEST;
     unsigned char ucDataFlags = nAsServer ? (FLAG_RESPONSE | FLAG_BINARY) : FLAG_BINARY;
     unsigned char aucBlock[FRAME_DATA_SIZE];
@@ -184,6 +210,13 @@ int sendFile(int nFd, const char *psKind, const char *psPath, int nSize, const c
 
     nFileFd = open(psPath, O_RDONLY);
     while (nRemaining > 0) {
+        // Stopped halfway: the receiver will see the connection close
+        if (isStopped(pnStop)) {
+            if (nFileFd >= 0) {
+                close(nFileFd);
+            }
+            return TRANSFER_LOST;
+        }
         nBlock = nRemaining < FRAME_DATA_SIZE ? nRemaining : FRAME_DATA_SIZE;
 
         // The receiver expects exactly the announced number of frames. If the
@@ -268,17 +301,18 @@ int isMd5Text(const char *psText) {
  *       In: psKind transfer kind expected in the header
  *       In: psDir folder where the file is stored
  *       Out: ppsPath path of the stored file (the caller frees it), or NULL
+ *       In: pnStop stop flag checked between frames, or NULL
  * @Ret: TRANSFER_OK, TRANSFER_REJECTED or TRANSFER_LOST.
  *
  ***********************************************/
-int receiveFile(int nFd, const char *psKind, const char *psDir, char **ppsPath) {
+int receiveFile(int nFd, const char *psKind, const char *psDir, char **ppsPath, const int *pnStop) {
     tFrame stHeader;
 
     *ppsPath = NULL;
     if (recvFrame(nFd, &stHeader) != 1) {
         return TRANSFER_LOST;
     }
-    return receiveFileFrom(nFd, &stHeader, psKind, psDir, ppsPath);
+    return receiveFileFrom(nFd, &stHeader, psKind, psDir, ppsPath, pnStop);
 }
 
 /***********************************************
@@ -314,10 +348,11 @@ int rejectFile(int nFd, const char *psReason) {
  *       In: psKind transfer kind expected in the header
  *       In: psDir folder where the file is stored
  *       Out: ppsPath path of the stored file (the caller frees it), or NULL
+ *       In: pnStop stop flag checked between frames, or NULL
  * @Ret: TRANSFER_OK, TRANSFER_REJECTED or TRANSFER_LOST.
  *
  ***********************************************/
-int receiveFileFrom(int nFd, const tFrame *pstHeader, const char *psKind, const char *psDir, char **ppsPath) {
+int receiveFileFrom(int nFd, const tFrame *pstHeader, const char *psKind, const char *psDir, char **ppsPath, const int *pnStop) {
     char sData[FRAME_DATA_SIZE + 1];
     char sMd5[MD5_LENGTH + 1];
     char sExpectedMd5[MD5_LENGTH + 1];
@@ -373,7 +408,8 @@ int receiveFileFrom(int nFd, const tFrame *pstHeader, const char *psKind, const 
     // N = FileSize / 253, rounded up
     nFrames = (nSize + FRAME_DATA_SIZE - 1) / FRAME_DATA_SIZE;
     for (int i = 0; i < nFrames; i++) {
-        if (recvFrame(nFd, &stFrame) != 1 || stFrame.ucType != TYPE_FILE_DATA) {
+        // Stopped or broken halfway: the partial file is never kept
+        if (isStopped(pnStop) || recvFrame(nFd, &stFrame) != 1 || stFrame.ucType != TYPE_FILE_DATA) {
             close(nFileFd);
             unlink(psPath);
             free(psPath);

@@ -69,6 +69,7 @@ int main(int argc, char *argv[]) {
         write(STDERR_FILENO, "Error: out of memory\n", strlen("Error: out of memory\n"));
         return EXIT_FAILURE;
     }
+    stShip.pnStop = &gnStop;
 
     char *psMsg = NULL;
     if (asprintf(&psMsg, "Odysseus %s is ready to sail.\n", stShip.stConfig.psName) >= 0) {

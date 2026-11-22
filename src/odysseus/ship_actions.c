@@ -28,6 +28,27 @@ static void sayError(const char *psReason) {
 }
 
 /***********************************************
+ * @Name: reportLost
+ * @Def: Explains why a connection ended in the middle of an operation:
+ *       stopped with CTRL+C, or lost.
+ * @Arg: In: pstShip ship state (holds the stop flag)
+ *       In: psWho who the connection was with
+ * @Ret: None.
+ ***********************************************/
+static void reportLost(const tShip *pstShip, const char *psWho) {
+    char *psMsg = NULL;
+
+    if (pstShip->pnStop != NULL && *pstShip->pnStop) {
+        printF("\nTransfer interrupted. Nothing has been accepted.\n");
+        return;
+    }
+    if (asprintf(&psMsg, "Error: connection to %s lost.\n", psWho) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+}
+
+/***********************************************
  * @Name: setLocation
  * @Def: Replaces the ship's current location with a heap copy of the name.
  * @Arg: In/Out: pstShip ship to update
@@ -372,10 +393,10 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     printAndFree(psMsg);
 
     // Ithaca sends the object right after the OK
-    nRes = receiveFile(pstShip->nIthacaFd, "OBJECT", pstShip->stConfig.psFilePath, &psPath);
+    nRes = receiveFile(pstShip->nIthacaFd, "OBJECT", pstShip->stConfig.psFilePath, &psPath, pstShip->pnStop);
     if (nRes != TRANSFER_OK) {
         if (nRes == TRANSFER_LOST) {
-            printF("Error: connection to Ithaca lost.\n");
+            reportLost(pstShip, "Ithaca");
             closeSocket(&pstShip->nIthacaFd);
         } else {
             printF("Error: the object could not be received. The voyage has been cancelled.\n");
@@ -660,7 +681,7 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     if (pstShip->nHasVoyage && !pstShip->stVoyage.nDelivered &&
         strcasecmp(pstDest->sName, pstShip->stVoyage.psDestination) == 0) {
         psMsg = NULL;
-        if (asprintf(&psMsg, "\n>>> We have reached the destination: %s\n", pstDest->sName) < 0) {
+        if (asprintf(&psMsg, "\n>>> We have reached the destination: %s\n",pstDest->sName) < 0) {
             psMsg = NULL;
         }
         printAndFree(psMsg);
@@ -779,7 +800,7 @@ static int isDocked(const tShip *pstShip) {
  * @Ret: Always -1, so callers can write "return islandLost(pstShip);".
  ***********************************************/
 static int islandLost(tShip *pstShip) {
-    printF("Error: connection to the island lost.\n");
+    reportLost(pstShip, "the island");
     closeSocket(&pstShip->nIslandFd);
     return -1;
 }
@@ -1462,7 +1483,7 @@ int cmdDeliver(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
 
     // DELIVERY transfer: Odysseus sends as a client
-    nRes = sendFile(pstShip->nIslandFd, "DELIVERY", pstShip->stVoyage.psObjectPath, nSize, sMd5, 0);
+    nRes = sendFile(pstShip->nIslandFd, "DELIVERY", pstShip->stVoyage.psObjectPath, nSize, sMd5, 0, pstShip->pnStop);
     if (nRes == TRANSFER_LOST) {
         return islandLost(pstShip);
     }
@@ -1479,7 +1500,7 @@ int cmdDeliver(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return islandLost(pstShip);
     }
     if (nRes == TRANSFER_OK && stFrame.ucType == TYPE_FILE_HEADER) {
-        nRes = receiveFileFrom(pstShip->nIslandFd, &stFrame, "SIGNED", pstShip->stConfig.psFilePath, &psSigned);
+        nRes = receiveFileFrom(pstShip->nIslandFd, &stFrame, "SIGNED", pstShip->stConfig.psFilePath, &psSigned, pstShip->pnStop);
         if (nRes == TRANSFER_LOST || recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
             free(psSigned);
             return islandLost(pstShip);
@@ -1522,7 +1543,7 @@ int cmdDeliver(tShip *pstShip, int nArgc, char *ppsArgv[]) {
  * @Ret: Always -1, so callers can write "return ithacaLost(pstShip);".
  ***********************************************/
 static int ithacaLost(tShip *pstShip) {
-    printF("Error: connection to Ithaca lost.\n");
+    reportLost(pstShip, "Ithaca");
     closeSocket(&pstShip->nIthacaFd);
     return -1;
 }
@@ -1584,7 +1605,7 @@ int cmdClaim(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
 
     // CLAIM transfer: Odysseus sends as a client
-    nRes = sendFile(pstShip->nIthacaFd, "CLAIM", pstShip->stVoyage.psSignedPath, nSize, sMd5, 0);
+    nRes = sendFile(pstShip->nIthacaFd, "CLAIM", pstShip->stVoyage.psSignedPath, nSize, sMd5, 0, pstShip->pnStop);
     if (nRes == TRANSFER_LOST) {
         return ithacaLost(pstShip);
     }
