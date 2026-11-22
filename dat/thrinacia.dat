@@ -1,0 +1,10 @@
+Thrinacia
+./str_files/thrinacia_files
+172.16.214.20 8555
+2
+--- ROUTES ---
+Aeaea 172.16.214.20 8552
+Scheria 172.16.214.20 8553
+Ogygia 172.16.214.20 8554
+Aeolia 172.16.214.20 8556
+Ismarus 172.16.214.20 8557

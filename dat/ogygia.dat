@@ -1,0 +1,10 @@
+Ogygia
+./str_files/ogygia_files
+172.16.214.20 8554
+3
+--- ROUTES ---
+Aeaea 172.16.214.20 8552
+Scheria 172.16.214.20 8553
+Thrinacia 172.16.214.20 8555
+Aeolia 172.16.214.20 8556
+Ismarus 172.16.214.20 8557

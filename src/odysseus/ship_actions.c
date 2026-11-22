@@ -19,12 +19,47 @@
  * @Arg: In: psReason text of the error (often the reason sent by a server)
  * @Ret: None.
  ***********************************************/
-static void sayError(const char *psReason) {
+void sayError(const char *psReason) {
     char *psMsg = NULL;
     if (asprintf(&psMsg, "Error: %s\n", psReason) < 0) {
         psMsg = NULL;                       // contents are undefined when asprintf fails
     }
     printAndFree(psMsg);
+}
+
+/***********************************************
+ * @Name: reportLost
+ * @Def: Explains why a connection ended in the middle of an operation:
+ *       stopped with CTRL+C, or lost.
+ * @Arg: In: pstShip ship state (holds the stop flag)
+ *       In: psWho who the connection was with
+ * @Ret: None.
+ ***********************************************/
+void reportLost(const tShip *pstShip, const char *psWho) {
+    char *psMsg = NULL;
+
+    if (pstShip->pnStop != NULL && *pstShip->pnStop) {
+        printF("\nTransfer interrupted. Nothing has been accepted.\n");
+        return;
+    }
+    if (asprintf(&psMsg, "Error: connection to %s lost.\n", psWho) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+}
+
+/***********************************************
+ * @Name: saveState
+ * @Def: Saves the progress of the ship after a change, so a later execution
+ *       can continue from here. Only warns if it fails: the change itself
+ *       has already happened.
+ * @Arg: In: pstShip ship state
+ * @Ret: None.
+ ***********************************************/
+void saveState(const tShip *pstShip) {
+    if (saveShipState(pstShip) != 0) {
+        printF("Warning: the progress of the ship could not be saved.\n");
+    }
 }
 
 /***********************************************
@@ -34,7 +69,7 @@ static void sayError(const char *psReason) {
  *       In: psName new location
  * @Ret: 0 on success, -1 if memory could not be allocated (location unchanged).
  ***********************************************/
-static int setLocation(tShip *pstShip, const char *psName) {
+int setLocation(tShip *pstShip, const char *psName) {
     char *psCopy = dupString(psName);
     if (psCopy == NULL) {
         return -1;
@@ -55,7 +90,7 @@ static int setLocation(tShip *pstShip, const char *psName) {
  *       In: nReward gold paid on completion
  * @Ret: 0 on success, -1 if memory could not be allocated (voyage unchanged).
  ***********************************************/
-static int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *psDest, int nReward) {
+int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *psDest, int nReward) {
     char *psObjCopy = dupString(psObject);
     char *psDestCopy = dupString(psDest);
 
@@ -66,12 +101,32 @@ static int setVoyage(tShip *pstShip, int nId, const char *psObject, const char *
     }
     free(pstShip->stVoyage.psObject);
     free(pstShip->stVoyage.psDestination);
+    free(pstShip->stVoyage.psObjectPath);
+    free(pstShip->stVoyage.psSignedPath);
+    pstShip->stVoyage.psObjectPath = NULL;
+    pstShip->stVoyage.psSignedPath = NULL;
+    pstShip->stVoyage.nDelivered = 0;
     pstShip->stVoyage.nId = nId;
     pstShip->stVoyage.psObject = psObjCopy;
     pstShip->stVoyage.psDestination = psDestCopy;
     pstShip->stVoyage.nReward = nReward;
     pstShip->nHasVoyage = 1;
     return 0;
+}
+
+/***********************************************
+ * @Name: clearVoyage
+ * @Def: Forgets the active voyage and frees its strings.
+ * @Arg: In/Out: pstShip ship to update
+ * @Ret: None.
+ ***********************************************/
+void clearVoyage(tShip *pstShip) {
+    free(pstShip->stVoyage.psObject);
+    free(pstShip->stVoyage.psDestination);
+    free(pstShip->stVoyage.psObjectPath);
+    free(pstShip->stVoyage.psSignedPath);
+    memset(&pstShip->stVoyage, 0, sizeof(pstShip->stVoyage));
+    pstShip->nHasVoyage = 0;
 }
 
 /***********************************************
@@ -89,6 +144,8 @@ void releaseShip(tShip *pstShip) {
     free(pstShip->psLocation);
     free(pstShip->stVoyage.psObject);
     free(pstShip->stVoyage.psDestination);
+    free(pstShip->stVoyage.psObjectPath);
+    free(pstShip->stVoyage.psSignedPath);
 
     for (int i = 0; i < pstShip->nNumIslands; i++) {
         free(pstShip->pstIslands[i].sName);
@@ -117,7 +174,7 @@ void releaseShip(tShip *pstShip) {
  * @Arg: In/Out: pstShip ship that leaves
  * @Ret: None.
  ***********************************************/
-static void leaveCurrentPort(tShip *pstShip) {
+void leaveCurrentPort(tShip *pstShip) {
     tFrame stReply;
     int *pnFd;
     unsigned char ucType;
@@ -163,7 +220,7 @@ int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     if (pstShip->nIslandFd >= 0) {
     char *psMsg = NULL;
-    if (asprintf(&psMsg, "Leaving %s...\n",
+    if (asprintf(&psMsg, "Leaving %s...\nReturning directly to Ithaca...\n",
                  pstShip->psLocation ? pstShip->psLocation : "port") < 0) {
         psMsg = NULL;
     }
@@ -197,6 +254,7 @@ int cmdConnectIthaca(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return -1;
     }
     pstShip->nIthacaFd = nFd;
+    saveState(pstShip);
     printF("Connected to Ithaca.\n");
     return 0;
 }
@@ -286,7 +344,10 @@ int cmdListVoyages(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 /***********************************************
  * @Name: cmdAcceptVoyage
  * @Def: ACCEPT <id>. Asks Ithaca for the voyage and, on success, stores it
- *       as the ship's active voyage. Not allowed while a voyage is active.
+ *       as the ship's active voyage and receives its object (OBJECT
+ *       transfer) into the ship's folder. Without the object the voyage is
+ *       dropped, as Ithaca also releases it. Not allowed while a voyage is
+ *       active.
  * @Arg: In/Out: pstShip ship state (must be connected to Ithaca)
  *       In: nArgc unused
  *       In: ppsArgv ppsArgv[0] = voyage identifier
@@ -297,6 +358,8 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     tFrame stReply;
     char sData[FRAME_DATA_SIZE + 1];
+    char *psPath = NULL;
+    int nRes;
 
     if (pstShip->nIthacaFd < 0) {
         printF("Error: not connected to Ithaca.\n");
@@ -338,11 +401,28 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     }
 
     char *psMsg = NULL;
-    if (asprintf(&psMsg, "Voyage %d accepted.\nDestination: %s.\n",
-                 pstShip->stVoyage.nId, pstShip->stVoyage.psDestination) < 0) {
+    if (asprintf(&psMsg, "Voyage %d accepted.\nDestination: %s.\n\nReceiving %s...\n",
+                 pstShip->stVoyage.nId, pstShip->stVoyage.psDestination, pstShip->stVoyage.psObject) < 0) {
         psMsg = NULL;
     }
     printAndFree(psMsg);
+
+    // Ithaca sends the object right after the OK
+    nRes = receiveFile(pstShip->nIthacaFd, "OBJECT", pstShip->stConfig.psFilePath, &psPath, pstShip->pnStop);
+    if (nRes != TRANSFER_OK) {
+        if (nRes == TRANSFER_LOST) {
+            reportLost(pstShip, "Ithaca");
+            closeSocket(&pstShip->nIthacaFd);
+        } else {
+            printF("Error: the object could not be received. The voyage has been cancelled.\n");
+        }
+        clearVoyage(pstShip);
+        return -1;
+    }
+    pstShip->stVoyage.psObjectPath = psPath;
+    // Saved only now: the voyage counts once its object is on board
+    saveState(pstShip);
+    printF("Object transferred correctly.\n");
     return 0;
 }
 
@@ -356,7 +436,7 @@ int cmdAcceptVoyage(tShip *pstShip, int nArgc, char *ppsArgv[]) {
  *       In: psName island name
  * @Ret: Pointer to the island, or NULL if unknown.
  ***********************************************/
-static const tKnownIsland *findKnownIsland(const tShip *pstShip, const char *psName) {
+const tKnownIsland *findKnownIsland(const tShip *pstShip, const char *psName) {
     for (int i = 0; i < pstShip->nNumIslands; i++) {
         if (strcasecmp(pstShip->pstIslands[i].sName, psName) == 0) {
             return &pstShip->pstIslands[i];
@@ -373,7 +453,7 @@ static const tKnownIsland *findKnownIsland(const tShip *pstShip, const char *psN
  *       In: psFrom, psTo the two islands
  * @Ret: 1 if a direct route is known, 0 otherwise.
  ***********************************************/
-static int isDirectRoute(const tShip *pstShip, const char *psFrom, const char *psTo) {
+int isDirectRoute(const tShip *pstShip, const char *psFrom, const char *psTo) {
     for (int i = 0; i < pstShip->nNumRoutes; i++) {
         const tKnownRoute *pstR = &pstShip->pstRoutes[i];
         if ((strcasecmp(pstR->sA, psFrom) == 0 && strcasecmp(pstR->sB, psTo) == 0) ||
@@ -390,7 +470,7 @@ static int isDirectRoute(const tShip *pstShip, const char *psFrom, const char *p
  * @Arg: In: pstShip ship state
  * @Ret: Total provisions in kilograms.
  ***********************************************/
-static int totalProvisions(const tShip *pstShip) {
+int totalProvisions(const tShip *pstShip) {
     int nTotal = 0;
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems; i++) {
         nTotal += pstShip->stConfig.pstFoodSupplies[i].nQuantity;
@@ -406,7 +486,7 @@ static int totalProvisions(const tShip *pstShip) {
  *       In: nKg kilograms to consume
  * @Ret: None.
  ***********************************************/
-static void consumeProvisions(tShip *pstShip, int nKg) {
+void consumeProvisions(tShip *pstShip, int nKg) {
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems && nKg > 0; i++) {
         tFood *pstFood = &pstShip->stConfig.pstFoodSupplies[i];
         if (pstFood->nQuantity < nKg) {
@@ -425,7 +505,7 @@ static void consumeProvisions(tShip *pstShip, int nKg) {
  *       Monotonic means it never jumps if the system clock is changed.
  * @Ret: Milliseconds since an arbitrary fixed point.
  ***********************************************/
-static long nowMs(void) {
+long nowMs(void) {
     struct timespec stTs;
     clock_gettime(CLOCK_MONOTONIC, &stTs);
     return stTs.tv_sec * 1000L + stTs.tv_nsec / 1000000L;
@@ -442,7 +522,7 @@ static long nowMs(void) {
  * @Ret: 1 if the ship docked, 0 otherwise (lost at sea, connection lost or
  *       interrupted). In every 0 case the island socket is closed.
  ***********************************************/
-static int waitForDocking(tShip *pstShip, const char *psIsland) {
+int waitForDocking(tShip *pstShip, const char *psIsland) {
     struct pollfd astFds[1];
     tFrame stFrame;
     char sData[FRAME_DATA_SIZE + 1];
@@ -489,6 +569,7 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
 
         consumeProvisions(pstShip, RATION_KG);
         nNextRation += RATION_INTERVAL_MS;
+        saveState(pstShip);
 
         psMsg = NULL;
         if (asprintf(&psMsg, "\n>>> The crew consumes another ration.\nProvisions remaining: %d kg\n", totalProvisions(pstShip)) < 0) {
@@ -503,6 +584,8 @@ static int waitForDocking(tShip *pstShip, const char *psIsland) {
             }
             printAndFree(psMsg);
             closeSocket(&pstShip->nIslandFd);
+            // The mission and the object are lost: the next execution starts fresh
+            deleteShipState(pstShip);
             pstShip->nShouldExit = 1;
             return 0;
         }
@@ -535,11 +618,18 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     int nFromIthaca = (strcasecmp(pstShip->psLocation, "Ithaca") == 0);
     const tKnownIsland *pstDest = findKnownIsland(pstShip, ppsArgv[0]);
+    int nRejoin = 0;
 
-    // From Ithaca only the starting island is valid; from an island, only direct routes
+    // From Ithaca only the starting island is valid; from an island, only direct routes.
+    // A ship that is not connected (restored from a previous execution, or
+    // after a failed SAIL) can also go back into the port it is at.
     int nReachable = 0;
     if (pstDest != NULL) {
-        if (nFromIthaca) {
+        nRejoin = (pstShip->nIslandFd < 0 && pstShip->nIthacaFd < 0 &&
+                   strcasecmp(pstShip->psLocation, pstDest->sName) == 0);
+        if (nRejoin) {
+            nReachable = 1;
+        } else if (nFromIthaca) {
             nReachable = (strcasecmp(pstDest->sName, pstShip->stConfig.psIslandName) == 0);
         } else {
             nReachable = isDirectRoute(pstShip, pstShip->psLocation, pstDest->sName);
@@ -553,7 +643,11 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         return -1;
     }
 
-    if (asprintf(&psMsg, "Leaving %s...\nSailing to %s...\n", pstShip->psLocation, pstDest->sName) < 0) {
+    if (nRejoin) {
+        if (asprintf(&psMsg, "Returning to the port of %s...\n", pstDest->sName) < 0) {
+            psMsg = NULL;
+        }
+    } else if (asprintf(&psMsg, "Leaving %s...\nSailing to %s...\n", pstShip->psLocation, pstDest->sName) < 0) {
         psMsg = NULL;
     }
     printAndFree(psMsg);
@@ -612,6 +706,19 @@ int cmdSail(tShip *pstShip, int nArgc, char *ppsArgv[]) {
     if (setLocation(pstShip, pstDest->sName) < 0) {
         printF("Error: out of memory.\n");
         return -1;
+    }
+    saveState(pstShip);
+
+    // Arrived where the object has to be delivered
+    if (pstShip->nHasVoyage && !pstShip->stVoyage.nDelivered &&
+        strcasecmp(pstDest->sName, pstShip->stVoyage.psDestination) == 0) {
+        psMsg = NULL;
+        if (asprintf(&psMsg, "\n>>> We have reached %s, the destination of our voyage.\n"
+                             "Use DELIVER to hand over the %s.\n",
+                     pstDest->sName, pstShip->stVoyage.psObject) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
     }
     return 0;
 }
@@ -715,7 +822,7 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]) {
  * @Arg: In: pstShip ship state
  * @Ret: 1 if docked at an island, 0 otherwise.
  ***********************************************/
-static int isDocked(const tShip *pstShip) {
+int isDocked(const tShip *pstShip) {
     return pstShip->nIslandFd >= 0 && pstShip->psLocation != NULL
            && strcasecmp(pstShip->psLocation, "Ithaca") != 0;
 }
@@ -726,8 +833,8 @@ static int isDocked(const tShip *pstShip) {
  * @Arg: In/Out: pstShip ship state
  * @Ret: Always -1, so callers can write "return islandLost(pstShip);".
  ***********************************************/
-static int islandLost(tShip *pstShip) {
-    printF("Error: connection to the island lost.\n");
+int islandLost(tShip *pstShip) {
+    reportLost(pstShip, "the island");
     closeSocket(&pstShip->nIslandFd);
     return -1;
 }
@@ -739,7 +846,7 @@ static int islandLost(tShip *pstShip) {
  *       In: psName product name
  * @Ret: Index of the product in the cargo, or -1 if not carried.
  ***********************************************/
-static int findCargo(const tShip *pstShip, const char *psName) {
+int findCargo(const tShip *pstShip, const char *psName) {
     for (int i = 0; i < pstShip->stConfig.nNumFoodItems; i++) {
         if (strcasecmp(pstShip->stConfig.pstFoodSupplies[i].psProduct, psName) == 0) {
             return i;
@@ -757,7 +864,7 @@ static int findCargo(const tShip *pstShip, const char *psName) {
  *       In: nKg kilograms to add
  * @Ret: 0 on success, -1 if memory could not be allocated.
  ***********************************************/
-static int addCargo(tShip *pstShip, const char *psName, int nKg) {
+int addCargo(tShip *pstShip, const char *psName, int nKg) {
     int nIdx = findCargo(pstShip, psName);
     tFood *pstNew;
     char *psCopy;
@@ -794,7 +901,7 @@ static int addCargo(tShip *pstShip, const char *psName, int nKg) {
  *       Out: pnPrice price per kilogram, if found
  * @Ret: 1 if found, 0 if the island does not sell it, -1 on error.
  ***********************************************/
-static int queryPrice(tShip *pstShip, const char *psProduct, int *pnPrice) {
+int queryPrice(tShip *pstShip, const char *psProduct, int *pnPrice) {
     tFrame stFrame;
     char sData[FRAME_DATA_SIZE + 1];
     int nIndex = 0;
@@ -846,7 +953,7 @@ static int queryPrice(tShip *pstShip, const char *psProduct, int *pnPrice) {
  *       Out: pstReply reply frame from the island
  * @Ret: 0 if a reply was received, -1 on error (message already printed).
  ***********************************************/
-static int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProduct, int nAmount, tFrame *pstReply) {
+int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProduct, int nAmount, tFrame *pstReply) {
     char *psData = NULL;
     int nLen = asprintf(&psData, "%s&%d", psProduct, nAmount);
     int nRet;
@@ -873,7 +980,7 @@ static int tradeRequest(tShip *pstShip, unsigned char ucType, const char *psProd
  *       Out: pnMoney cost (BUY) or income (SELL)
  * @Ret: 0 on success, -1 if the reply is malformed.
  ***********************************************/
-static int parseTradeReply(char *psData, char **ppsProduct, int *pnAmount, int *pnMoney) {
+int parseTradeReply(char *psData, char **ppsProduct, int *pnAmount, int *pnMoney) {
     char *psOk = strtok(psData, "&");
     char *psAmount;
     char *psMoney;
@@ -954,6 +1061,7 @@ int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         printE("Error: out of memory.\n");
         return -1;
     }
+    saveState(pstShip);
     if (asprintf(&psMsg, "Bought %d kg of %s for %d gold.\n", nBoughtKg, psProduct, nCost) < 0) {
         psMsg = NULL;
     }
@@ -1015,6 +1123,7 @@ int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     pstShip->stConfig.pstFoodSupplies[nIdx].nQuantity -= nSoldKg;
     pstShip->nMoney += nIncome;
+    saveState(pstShip);
     if (asprintf(&psMsg, "Sold %d kg of %s for %d gold.\n", nSoldKg, psProduct, nIncome) < 0) {
         psMsg = NULL;
     }
@@ -1029,7 +1138,7 @@ int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]) {
  *       In: psName, psIp, nPort island name and address
  * @Ret: 0 on success or if already known, -1 if memory could not be allocated.
  ***********************************************/
-static int addKnownIsland(tShip *pstShip, const char *psName, const char *psIp, int nPort) {
+int addKnownIsland(tShip *pstShip, const char *psName, const char *psIp, int nPort) {
     if (findKnownIsland(pstShip, psName) != NULL) {
         return 0;
     }
@@ -1061,7 +1170,7 @@ static int addKnownIsland(tShip *pstShip, const char *psName, const char *psIp, 
  *       In: psA, psB the two islands
  * @Ret: 1 if the route is new, 0 if already known, -1 on memory error.
  ***********************************************/
-static int addKnownRoute(tShip *pstShip, const char *psA, const char *psB) {
+int addKnownRoute(tShip *pstShip, const char *psA, const char *psB) {
     if (isDirectRoute(pstShip, psA, psB)) {
         return 0;
     }
@@ -1177,6 +1286,7 @@ int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         nRoutes += nAdded; 
     }
 
+    saveState(pstShip);
     char *psMsg = NULL;
     if (asprintf(&psMsg, "Bought the map of %s for %d gold.\n%s", pstShip->psLocation, MAP_PRICE, nRoutes > 0 ? "New routes have been charted.\n" : "") < 0) {
         psMsg = NULL;
@@ -1320,12 +1430,16 @@ int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
 
     psMsg = NULL;
     if (pstShip->nHasVoyage) {
-        if (asprintf(&psMsg, "Current voyage: %s -> %s\nReward: %d\n", tVoyage.psObject, tVoyage.psDestination, tVoyage.nReward) < 0) {
+        // After the delivery the object carried is the stamped one
+        const char *psFile = tVoyage.nDelivered ? tVoyage.psSignedPath : tVoyage.psObjectPath;
+        if (asprintf(&psMsg, "Current voyage: %s -> %s\nReward: %d\nObject: %s\n",
+                     tVoyage.psObject, tVoyage.psDestination, tVoyage.nReward,
+                     psFile ? baseName(psFile) : "None") < 0) {
             psMsg = NULL;
         }
         printAndFree(psMsg);
     } else {
-        printF("Current voyage: None\nReward: None\n");
+        printF("Current voyage: None\n");
     }
 
     psMsg = NULL;
@@ -1334,5 +1448,237 @@ int cmdStatus(tShip *pstShip, int nArgc, char *ppsArgv[]) {
         psMsg = NULL;
     }
     printAndFree(psMsg);
+    return 0;
+}
+/***********************************************
+ * @Name: cmdDeliver
+ * @Def: DELIVER. Only when docked at the destination of the active voyage.
+ *       Sends the object to the island (DELIVERY transfer), receives it back
+ *       stamped with the island's glyph (SIGNED transfer) and keeps the
+ *       stamped image as proof for Ithaca.
+ * @Arg: In/Out: pstShip ship state (must be docked at the destination)
+ *       In: nArgc, ppsArgv unused
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
+int cmdDeliver(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+    (void)ppsArgv;
+
+    tFrame stFrame;
+    char sData[FRAME_DATA_SIZE + 1];
+    char sMd5[MD5_LENGTH + 1];
+    char *psRequest = NULL;
+    char *psSigned = NULL;
+    char *psMsg = NULL;
+    int nSize = 0;
+    int nLen;
+    int nSent;
+    int nRes;
+
+    if (!pstShip->nHasVoyage) {
+        printF("Error: you have no active voyage.\n");
+        return -1;
+    }
+    if (pstShip->stVoyage.nDelivered) {
+        printF("Error: the object has already been delivered. Return to Ithaca to claim the reward.\n");
+        return -1;
+    }
+    if (!isDocked(pstShip)) {
+        printF("Error: you are not docked at any island.\n");
+        return -1;
+    }
+    if (strcasecmp(pstShip->psLocation, pstShip->stVoyage.psDestination) != 0) {
+        if (asprintf(&psMsg, "Error: %s is not the destination of the voyage (%s).\n",
+                     pstShip->psLocation, pstShip->stVoyage.psDestination) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
+        return -1;
+    }
+    // Checked before sending anything, so a missing file is just an error message
+    if (pstShip->stVoyage.psObjectPath == NULL ||
+        prepareFile(pstShip->stVoyage.psObjectPath, &nSize, sMd5) != 0) {
+        printF("Error: the object is missing from the cargo.\n");
+        return -1;
+    }
+
+    if (asprintf(&psMsg, "Delivering %s to %s...\n", pstShip->stVoyage.psObject, pstShip->psLocation) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+
+    // DELIVER request: "<VoyageID>&<Object>"
+    nLen = asprintf(&psRequest, "%d&%s", pstShip->stVoyage.nId, pstShip->stVoyage.psObject);
+    if (nLen < 0) {
+        printE("Error: out of memory.\n");
+        return -1;
+    }
+    nSent = sendFrame(pstShip->nIslandFd, TYPE_DELIVER, FLAG_REQUEST, psRequest, nLen);
+    free(psRequest);
+    if (nSent != 0) {
+        return islandLost(pstShip);
+    }
+
+    // DELIVERY transfer: Odysseus sends as a client
+    nRes = sendFile(pstShip->nIslandFd, "DELIVERY", pstShip->stVoyage.psObjectPath, nSize, sMd5, 0, pstShip->pnStop);
+    if (nRes == TRANSFER_LOST) {
+        return islandLost(pstShip);
+    }
+    if (nRes == TRANSFER_OK) {
+        psMsg = NULL;
+        if (asprintf(&psMsg, "Object transferred correctly.\n\n%s is stamping the object...\n", pstShip->psLocation) < 0) {
+            psMsg = NULL;
+        }
+        printAndFree(psMsg);
+    }
+
+    // Next comes the stamped image, or the final answer if something failed
+    if (recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
+        return islandLost(pstShip);
+    }
+    if (nRes == TRANSFER_OK && stFrame.ucType == TYPE_FILE_HEADER) {
+        nRes = receiveFileFrom(pstShip->nIslandFd, &stFrame, "SIGNED", pstShip->stConfig.psFilePath, &psSigned, pstShip->pnStop);
+        if (nRes == TRANSFER_LOST || recvFrame(pstShip->nIslandFd, &stFrame) != 1) {
+            free(psSigned);
+            return islandLost(pstShip);
+        }
+    }
+    if (stFrame.ucType != TYPE_DELIVER) {
+        free(psSigned);
+        return islandLost(pstShip);
+    }
+
+    frameDataToString(&stFrame, sData, sizeof(sData));
+    if (stFrame.ucFlags != FLAGS_OK) {
+        // The reason sent by the island
+        sayError(sData);
+        free(psSigned);
+        return -1;
+    }
+    if (psSigned == NULL) {
+        sayError("the stamped object was not received");
+        return -1;
+    }
+
+    free(pstShip->stVoyage.psSignedPath);
+    pstShip->stVoyage.psSignedPath = psSigned;
+    pstShip->stVoyage.nDelivered = 1;
+    // Saved only now: the delivery counts once the stamped image is on board
+    saveState(pstShip);
+
+    psMsg = NULL;
+    if (asprintf(&psMsg, "Stamped object received.\n\nDelivery completed.\nThe mark of %s has been obtained.\n",
+                 pstShip->psLocation) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+    return 0;
+}
+
+/***********************************************
+ * @Name: ithacaLost
+ * @Def: Reports a lost connection with Ithaca and closes the socket.
+ * @Arg: In/Out: pstShip ship state
+ * @Ret: Always -1, so callers can write "return ithacaLost(pstShip);".
+ ***********************************************/
+int ithacaLost(tShip *pstShip) {
+    reportLost(pstShip, "Ithaca");
+    closeSocket(&pstShip->nIthacaFd);
+    return -1;
+}
+
+/***********************************************
+ * @Name: cmdClaim
+ * @Def: CLAIM. Only when connected to Ithaca after delivering the object.
+ *       Sends the stamped image (CLAIM transfer) as proof of the delivery;
+ *       if Ithaca accepts it, the reward is added to the gold and the voyage
+ *       ends.
+ * @Arg: In/Out: pstShip ship state (must be connected to Ithaca)
+ *       In: nArgc, ppsArgv unused
+ * @Ret: 0 on success, -1 on error (message already printed).
+ ***********************************************/
+int cmdClaim(tShip *pstShip, int nArgc, char *ppsArgv[]) {
+    (void)nArgc;
+    (void)ppsArgv;
+
+    tFrame stFrame;
+    char sData[FRAME_DATA_SIZE + 1];
+    char sMd5[MD5_LENGTH + 1];
+    char sId[FRAME_DATA_SIZE + 1];
+    char *psMsg = NULL;
+    char *psOk;
+    char *psReward;
+    int nSize = 0;
+    int nLen;
+    int nReward;
+    int nRes;
+
+    if (pstShip->nIthacaFd < 0) {
+        printF("Error: not connected to Ithaca.\n");
+        return -1;
+    }
+    if (!pstShip->nHasVoyage) {
+        printF("Error: you have no active voyage.\n");
+        return -1;
+    }
+    if (!pstShip->stVoyage.nDelivered) {
+        printF("Error: the object has not been delivered yet.\n");
+        return -1;
+    }
+    // Checked before sending anything, so a missing file is just an error message
+    if (pstShip->stVoyage.psSignedPath == NULL ||
+        prepareFile(pstShip->stVoyage.psSignedPath, &nSize, sMd5) != 0) {
+        printF("Error: the stamped object is missing from the cargo.\n");
+        return -1;
+    }
+
+    if (asprintf(&psMsg, "Presenting the stamped %s...\n", pstShip->stVoyage.psObject) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+
+    // CLAIM request: "<VoyageID>"
+    nLen = snprintf(sId, sizeof(sId), "%d", pstShip->stVoyage.nId);
+    if (sendFrame(pstShip->nIthacaFd, TYPE_CLAIM, FLAG_REQUEST, sId, nLen) != 0) {
+        return ithacaLost(pstShip);
+    }
+
+    // CLAIM transfer: Odysseus sends as a client
+    nRes = sendFile(pstShip->nIthacaFd, "CLAIM", pstShip->stVoyage.psSignedPath, nSize, sMd5, 0, pstShip->pnStop);
+    if (nRes == TRANSFER_LOST) {
+        return ithacaLost(pstShip);
+    }
+    if (nRes == TRANSFER_OK) {
+        printF("\nObject transferred correctly.\n");
+    }
+
+    // Ithaca's verdict: OK&<Reward>, or the reason of the rejection
+    if (recvFrame(pstShip->nIthacaFd, &stFrame) != 1 || stFrame.ucType != TYPE_CLAIM) {
+        return ithacaLost(pstShip);
+    }
+    frameDataToString(&stFrame, sData, sizeof(sData));
+    if (stFrame.ucFlags != FLAGS_OK) {
+        sayError(sData);
+        return -1;
+    }
+    psOk = strtok(sData, "&");
+    psReward = strtok(NULL, "&");
+    if (psOk == NULL || psReward == NULL) {
+        printF("Error: malformed reply from Ithaca.\n");
+        return -1;
+    }
+    nReward = atoi(psReward);
+    pstShip->nMoney += nReward;
+
+    psMsg = NULL;
+    if (asprintf(&psMsg, "Glyph of %s verified.\n\nVoyage %d completed.\nReward received: %d gold.\n",
+                 pstShip->stVoyage.psDestination, pstShip->stVoyage.nId, nReward) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+
+    // The mission is over: the ship can accept a new voyage
+    clearVoyage(pstShip);
+    saveState(pstShip);
     return 0;
 }

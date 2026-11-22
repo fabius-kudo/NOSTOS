@@ -22,6 +22,8 @@
 #include "protocol.h"
 #include "SPHRAGIS Library-20260917/sphragis.h"
 #include "custom_io.h"
+#include "file_transfer.h"
+#include "ship_state.h"
 
 // Constants
 #define RATION_INTERVAL_MS 5000     // while waiting offshore, one ration is eaten every full 5 s
@@ -41,6 +43,8 @@ int cmdListMarket(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdBuy(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdSell(tShip *pstShip, int nArgc, char *ppsArgv[]);
 int cmdBuyMap(tShip *pstShip, int nArgc, char *ppsArgv[]);
+int cmdDeliver(tShip *pstShip, int nArgc, char *ppsArgv[]);
+int cmdClaim(tShip *pstShip, int nArgc, char *ppsArgv[]);
 
 // --- Local commands (no frames sent) ---
 int cmdMap(tShip *pstShip, int nArgc, char *ppsArgv[]);

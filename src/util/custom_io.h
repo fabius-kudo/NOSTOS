@@ -18,7 +18,7 @@
 #define printF(x) write(STDOUT_FILENO, x, strlen(x))
 #define printE(x) write(STDERR_FILENO, x, strlen(x))
 
-char *readDynamic(int nFd, int nUntilNewline);   // reads until '\n' or EOF
+char *readDynamic(int nFd, int nUntilNewline);
 char *dupString(const char *psSource);  // heap copy of a string
 void printAndFree(char *psMsg);
 

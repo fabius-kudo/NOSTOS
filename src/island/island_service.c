@@ -1,7 +1,8 @@
 /***********************************************
  *
  * @File : island_service.c
- * @Purpose : Attends one ship at a time on the island (docking, market and map)
+ * @Purpose : Attends one ship at a time on the island (docking, market, map
+ *            and delivery of objects)
  * @Author : Elvar Nói Leistner, Daiki Fabius Kudo
  * @Date : 11/11/26
  *
@@ -346,6 +347,123 @@ void handleTrade(tIslandSession *pstSession, const tFrame *pstFrame, int nIsBuy)
 
 /***********************************************
  *
+ * @Name: rejectDelivery
+ * @Def: Refuses a DELIVER request. The ship starts sending the object right
+ *       after the request, so its header is answered with an error first
+ *       (no data frames follow), and then the DELIVER answer gives the reason.
+ * @Arg: In: pstSession session of the ship
+ *       In: psReason reason sent to the ship
+ * @Ret: Returns 0 to keep serving the ship, -1 if the connection was lost.
+ *
+ ***********************************************/
+int rejectDelivery(tIslandSession *pstSession, const char *psReason) {
+    if (rejectFile(pstSession->nFd, psReason) == TRANSFER_LOST) {
+        return -1;
+    }
+    sendTextFrame(pstSession->nFd, TYPE_DELIVER, FLAGS_ERR, psReason);
+    return 0;
+}
+
+/***********************************************
+ *
+ * @Name: handleDeliver
+ * @Def: Handles DELIVER (0x15) from a docked ship: receives its object
+ *       (DELIVERY transfer), stamps it with the glyph of this island using
+ *       SPHRAGIS, sends the stamped image back (SIGNED transfer) and confirms
+ *       the delivery. Both images stay in the folder of the island.
+ * @Arg: In/Out: pstSession session of the ship
+ *       In: pstFrame received request frame (data is "<VoyageID>&<Object>")
+ * @Ret: Returns 0 to keep serving the ship, -1 if the connection was lost.
+ *
+ ***********************************************/
+int handleDeliver(tIslandSession *pstSession, const tFrame *pstFrame) {
+    const tIsland *pstIsland = pstSession->pstIsland;
+    char sData[FRAME_DATA_SIZE + 1];
+    char sMd5[MD5_LENGTH + 1];
+    char *psId;
+    char *psObject;
+    char *psReceived = NULL;
+    char *psSigned = NULL;
+    char *psMsg = NULL;
+    int nSize = 0;
+    int nRes;
+
+    frameDataToString(pstFrame, sData, sizeof(sData));
+    psId = strtok(sData, "&");
+    psObject = strtok(NULL, "&");
+
+    if (portGetState(pstSession->pstPort, &pstSession->stShip) != PORT_DOCKED) {
+        return rejectDelivery(pstSession, "NOT_DOCKED");
+    }
+    if (psId == NULL || psObject == NULL || atoi(psId) <= 0) {
+        return rejectDelivery(pstSession, "INVALID_FORMAT");
+    }
+
+    if (asprintf(&psMsg, ">>> %s requests delivery of voyage %d.\n>>> Receiving %s...\n",
+                 pstSession->psShipName, atoi(psId), psObject) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+
+    // DELIVERY transfer: the object is stored in the folder of the island
+    nRes = receiveFile(pstSession->nFd, "DELIVERY", pstIsland->psPath, &psReceived, NULL);
+    if (nRes == TRANSFER_LOST) {
+        printF(">>> The transfer was interrupted. Nothing has been accepted.\n");
+        return -1;
+    }
+    if (nRes == TRANSFER_REJECTED) {
+        printF(">>> The object could not be received.\n");
+        sendTextFrame(pstSession->nFd, TYPE_DELIVER, FLAGS_ERR, "DELIVERY_FAILED");
+        return 0;
+    }
+
+    if (asprintf(&psMsg, ">>> Object received correctly.\n\n>>> Stamping object with the glyph of %s...\n",
+                 pstIsland->psName) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+
+    // The stamped copy gets its own name, so the received image is kept as it arrived
+    if (asprintf(&psSigned, "%s/signed_%s", pstIsland->psPath, baseName(psReceived)) < 0) {
+        psSigned = NULL;
+    }
+    if (psSigned == NULL ||
+        SPHRAGIS_sign_with_glyph(pstIsland->psName, psReceived, psSigned) != SPHRAGIS_OK ||
+        prepareFile(psSigned, &nSize, sMd5) != 0) {
+        printF(">>> The object could not be stamped.\n");
+        sendTextFrame(pstSession->nFd, TYPE_DELIVER, FLAGS_ERR, "STAMP_FAILED");
+        free(psReceived);
+        free(psSigned);
+        return 0;
+    }
+    free(psReceived);
+
+    if (asprintf(&psMsg, ">>> Object stamped successfully.\n\n>>> Sending stamped object to %s...\n",
+                 pstSession->psShipName) < 0) {
+        psMsg = NULL;
+    }
+    printAndFree(psMsg);
+
+    // SIGNED transfer: the island sends as a server
+    nRes = sendFile(pstSession->nFd, "SIGNED", psSigned, nSize, sMd5, 1, NULL);
+    free(psSigned);
+    if (nRes == TRANSFER_LOST) {
+        printF(">>> The transfer was interrupted. The delivery is not confirmed.\n");
+        return -1;
+    }
+    if (nRes == TRANSFER_REJECTED) {
+        printF(">>> The stamped object could not be sent.\n");
+        sendTextFrame(pstSession->nFd, TYPE_DELIVER, FLAGS_ERR, "SIGNED_TRANSFER_FAILED");
+        return 0;
+    }
+
+    sendTextFrame(pstSession->nFd, TYPE_DELIVER, FLAGS_OK, "OK");
+    printF(">>> Transfer completed.\n");
+    return 0;
+}
+
+/***********************************************
+ *
  * @Name: serveShip
  * @Def: Main loop of a ship thread: reads its requests and answers them
  *       until the ship leaves or the connection is lost.
@@ -386,6 +504,9 @@ void serveShip(tIslandSession *pstSession) {
                 break;
             case TYPE_SELL:
                 handleTrade(pstSession, &stFrame, 0);
+                break;
+            case TYPE_DELIVER:
+                nEnd = (handleDeliver(pstSession, &stFrame) < 0);
                 break;
             default:
                 sendTextFrame(pstSession->nFd, TYPE_NACK, FLAGS_ERR, "INVALID_TYPE");
