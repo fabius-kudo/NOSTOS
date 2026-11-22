@@ -13,19 +13,6 @@
 
 #include "file_transfer.h"
 
-// Every transfer follows the same four steps, whoever sends:
-//   sender   -> header 0x20   "<KIND>&<FileName>&<FileSize>&<MD5SUM>"
-//   receiver -> READY 0x22    (or an error with the reason)
-//   sender   -> N data frames 0x21, 253 bytes each except the last one
-//   receiver -> final ACK 0x23 (OK, SIZE_ERROR or MD5_ERROR)
-// Only the flags of the sender change: Ithaca and the islands answer as
-// servers (header 0x80, data 0xA0) and Odysseus sends as a client (header
-// 0x00, data 0x20).
-//
-// A transfer can be stopped (CTRL+C) through a stop flag the caller owns.
-// It is checked between frames: a stopped transfer counts as lost, the
-// caller closes the connection and any partial file is removed, so the
-// other side sees the connection close and never accepts a partial file.
 
 /***********************************************
  *
@@ -69,17 +56,15 @@ int computeMd5(const char *psPath, char *psMd5) {
     }
 
     if (nPid == 0) {
-        // Child: its standard output becomes the write end of the pipe, then
-        // it is replaced by md5sum, which prints "<hash>  <file>"
+        //Child: standard output becomes write of the pipe
         close(anPipe[0]);
         dup2(anPipe[1], STDOUT_FILENO);
         close(anPipe[1]);
         execlp("md5sum", "md5sum", psPath, (char *)NULL);
-        // Only reached if md5sum could not be executed
         exit(EXIT_FAILURE);
     }
 
-    // Parent: reads the hash and waits for the child, so it does not stay a zombie
+    //Parent: reads the hash and waits for the child
     close(anPipe[1]);
     nBytes = read(anPipe[0], psMd5 + nRead, MD5_LENGTH - nRead);
     while (nBytes > 0 && nRead + nBytes < MD5_LENGTH) {
@@ -200,7 +185,7 @@ int sendFile(int nFd, const char *psKind, const char *psPath, int nSize, const c
         return TRANSFER_LOST;
     }
 
-    // The receiver says if it can store the file
+    //The receiver says if it can store the file
     if (recvFrame(nFd, &stFrame) != 1 || stFrame.ucType != TYPE_FILE_READY) {
         return TRANSFER_LOST;
     }
@@ -210,7 +195,6 @@ int sendFile(int nFd, const char *psKind, const char *psPath, int nSize, const c
 
     nFileFd = open(psPath, O_RDONLY);
     while (nRemaining > 0) {
-        // Stopped halfway: the receiver will see the connection close
         if (isStopped(pnStop)) {
             if (nFileFd >= 0) {
                 close(nFileFd);
@@ -219,9 +203,7 @@ int sendFile(int nFd, const char *psKind, const char *psPath, int nSize, const c
         }
         nBlock = nRemaining < FRAME_DATA_SIZE ? nRemaining : FRAME_DATA_SIZE;
 
-        // The receiver expects exactly the announced number of frames. If the
-        // file can no longer be read, zeros are sent instead so both sides
-        // stay in step; the receiver then reports an MD5_ERROR.
+        //Zeroes sent if file shorter,etc
         nGot = 0;
         if (nFileFd >= 0) {
             nGot = read(nFileFd, aucBlock, nBlock);
@@ -370,7 +352,7 @@ int receiveFileFrom(int nFd, const tFrame *pstHeader, const char *psKind, const 
 
     *ppsPath = NULL;
 
-    // Header: "<KIND>&<FileName>&<FileSize>&<MD5SUM>"
+    // Header: <KIND>&<FileName>&<FileSize>&<MD5SUM>
     if (pstHeader->ucType != TYPE_FILE_HEADER) {
         return TRANSFER_LOST;
     }
@@ -381,7 +363,7 @@ int receiveFileFrom(int nFd, const tFrame *pstHeader, const char *psKind, const 
     psMd5 = strtok(NULL, "&");
     if (psFileKind == NULL || psName == NULL || psSize == NULL || psMd5 == NULL ||
         strcmp(psFileKind, psKind) != 0 || !isSafeName(psName) || !isMd5Text(psMd5) || atoi(psSize) <= 0) {
-        // Nothing has been sent yet, so the connection stays in step
+        // Nothing has been sent yet
         sendTextFrame(nFd, TYPE_FILE_READY, FLAGS_ERR, "INVALID_HEADER");
         return TRANSFER_REJECTED;
     }
@@ -405,10 +387,10 @@ int receiveFileFrom(int nFd, const tFrame *pstHeader, const char *psKind, const 
         return TRANSFER_LOST;
     }
 
-    // N = FileSize / 253, rounded up
+    // N = FileSize / 253
     nFrames = (nSize + FRAME_DATA_SIZE - 1) / FRAME_DATA_SIZE;
     for (int i = 0; i < nFrames; i++) {
-        // Stopped or broken halfway: the partial file is never kept
+        // Stopped or broken halfway
         if (isStopped(pnStop) || recvFrame(nFd, &stFrame) != 1 || stFrame.ucType != TYPE_FILE_DATA) {
             close(nFileFd);
             unlink(psPath);

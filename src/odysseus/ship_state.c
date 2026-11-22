@@ -8,19 +8,8 @@
  ***********************************************/
 
 #define _GNU_SOURCE
-#include <stdio.h>
 
 #include "ship_state.h"
-
-// The state is kept in "<folder>/<name>.state", a binary file rewritten
-// whole after every change:
-//   numbers: marker, gold, number of products, islands and routes,
-//            has voyage, voyage id, reward, delivered
-//   texts:   last port, object, destination, object image, stamped image
-//   then each product (name, kg), each island (name, IP, port) and each
-//   route (island A, island B)
-// Every text is written as its length followed by its characters, with
-// length 0 for "none".
 
 // Written first, to recognise a valid state file
 #define STATE_MARKER 0x4E535431
